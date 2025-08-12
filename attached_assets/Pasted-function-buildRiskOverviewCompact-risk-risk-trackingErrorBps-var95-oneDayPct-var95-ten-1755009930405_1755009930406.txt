@@ -1,0 +1,59 @@
+function buildRiskOverviewCompact(risk){
+  // risk = { trackingErrorBps, var95_oneDayPct, var95_tenDayPct, beta, infoRatio, activeSharePct, factors: [...] }
+  const card = document.createElement("div");
+  card.className = "card";
+  const te = Number(risk?.trackingErrorBps ?? 0);
+  const tePct = Math.min(1, Math.abs(te) / 400); // normalize to 0..1 vs 400bps budget for bar
+  const var1 = Number(risk?.var95_oneDayPct ?? 0);
+  const var10 = Number(risk?.var95_tenDayPct ?? 0);
+  const beta = Number(risk?.beta ?? 1);
+  const ir = Number(risk?.infoRatio ?? 0);
+  const act = Number(risk?.activeSharePct ?? 0);
+
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Risk Overview</div>
+      <div class="risk-compact">
+        <div class="risk-stat">
+          <div class="risk-label">Tracking Error</div>
+          <div class="risk-value">${fmtBps(te)}</div>
+          <div class="risk-mini">Budget: 0–250 bps</div>
+          <div class="risk-bar" style="margin-top:8px;"><span style="right:${(100 - tePct*100).toFixed(1)}%"></span></div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">VaR (95%)</div>
+          <div class="risk-value">${var1.toFixed(1)}% (1-day)</div>
+          <div class="risk-mini">${var10.toFixed(1)}% (10-day)</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Beta</div>
+          <div class="risk-value">${beta.toFixed(2)}</div>
+          <div class="risk-mini">Info Ratio ${ir.toFixed(2)}</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Active Share</div>
+          <div class="risk-value">${act.toFixed(0)}%</div>
+          <div class="risk-mini">vs benchmark</div>
+        </div>
+      </div>
+
+      <details class="risk-collapsible">
+        <summary class="subtle">Factor Exposures (compact)</summary>
+        <div style="margin-top:8px;">
+          <table class="table">
+            <thead><tr><th>Factor</th><th style="width:80px;">Exposure</th></tr></thead>
+            <tbody>
+              ${(risk?.factors || []).slice(0,8).map(f => `
+                <tr>
+                  <td>${f.factor}</td>
+                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#b91c1c'}">${f.exposure.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  `;
+  return card;
+}

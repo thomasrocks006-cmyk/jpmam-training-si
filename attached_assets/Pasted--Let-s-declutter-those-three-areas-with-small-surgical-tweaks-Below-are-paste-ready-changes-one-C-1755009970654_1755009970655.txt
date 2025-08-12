@@ -1,0 +1,232 @@
+ Let’s declutter those three areas with small, surgical tweaks. Below are paste-ready changes: one CSS block and three JS updates. They’re conservative (no breaking markup), add whitespace, group info, and use progressive disclosure.
+
+1) public/style.css — append this block
+css
+Copy code
+/* --- Compact, breathable UI for pipeline, performance, risk --- */
+.section-title { font-size: 15px; font-weight: 600; margin: 2px 0 8px; }
+.subtle { color:#6b7280; }
+.sep { height:1px; background:var(--line); margin:10px 0; }
+
+.card .p { padding: 14px 16px; }          /* a touch more breathing room */
+.table th, .table td { padding: 8px 10px; line-height: 1.35; }
+
+/* Pipeline */
+.pipeline-box { display:flex; flex-direction: column; gap: 10px; }
+.pipeline-step { display:grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; }
+.pipeline-dot { width:10px; height:10px; border-radius:50%; background:#9ca3af; }
+.pipeline-step.active .pipeline-dot { background:#2563eb; }
+.pipeline-meta { display:flex; gap:10px; flex-wrap:wrap; }
+.pipeline-note { color:#4b5563; }
+
+/* Performance compact */
+.perf-compact table { width:100%; }
+.perf-compact .spark-cell svg { height:28px; }
+.perf-compact .muted { color:#6b7280; }
+.perf-actions { display:flex; justify-content:flex-end; gap:8px; }
+
+/* Risk overview compact */
+.risk-compact { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.risk-stat { border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; }
+.risk-label { font-size:12px; color:#6b7280; }
+.risk-value { font-size:18px; font-weight:700; margin-top:2px; }
+.risk-mini { font-size:12px; color:#6b7280; }
+.risk-collapsible { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; }
+.risk-bar { height:6px; border-radius:4px; background:#e5e7eb; position:relative; overflow:hidden; }
+.risk-bar > span { position:absolute; inset:0 100% 0 0; background:#8b5cf6; }
+@media (max-width: 900px){
+  .risk-compact { grid-template-columns: 1fr; }
+}
+2) public/app.js — Mandate pipeline box (clean layout)
+2a) Add this helper (place near other builders)
+js
+Copy code
+// --- Mandate Pipeline (compact) ---
+function buildPipelineBox(pipeline = []) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Mandate Pipeline</div>
+      <div class="pipeline-box"></div>
+    </div>
+  `;
+  const box = card.querySelector(".pipeline-box");
+  if (!pipeline.length){
+    box.innerHTML = `<div class="subtle">No pipeline items.</div>`;
+    return card;
+  }
+  pipeline.forEach((step, i) => {
+    const { stage, due, owner, note } = step;
+    const el = document.createElement("div");
+    el.className = "pipeline-step" + (i === 0 ? " active" : "");
+    el.innerHTML = `
+      <div class="pipeline-dot" aria-hidden="true"></div>
+      <div>
+        <div><b>${stage || "Stage"}</b></div>
+        <div class="pipeline-meta">
+          ${due ? `<span class="badge">${new Date(due).toLocaleDateString()}</span>` : ""}
+          ${owner ? `<span class="badge">${owner}</span>` : ""}
+        </div>
+        ${note ? `<div class="pipeline-note">${note}</div>` : ""}
+      </div>
+      <div><button class="btn-ghost" data-stage="${stage || ""}">Open</button></div>
+    `;
+    box.appendChild(el);
+  });
+  box.addEventListener("click", (e) => {
+    const st = e.target?.dataset?.stage;
+    if (!st) return;
+    // Simple routing: RFP -> Clients; Packs/Reports -> Reports page, etc.
+    if (/RFP/i.test(st)) { state.view = "clients"; render(); }
+    else { state.view = "report"; state.reportCode = "SLA-MONTHLY"; render(); }
+  });
+  return card;
+}
+2b) Use it inside Mandate or Client detail (where your pipeline currently renders)
+Find where you render pipeline (often in ViewMandateDetail() or the client detail view) and replace that block with:
+
+js
+Copy code
+// Replace your old pipeline markup with:
+const pipelineCard = buildPipelineBox(mandate.pipeline || client.pipeline || []);
+body.appendChild(pipelineCard);
+(If your code assembles multiple sections, just slot this pipelineCard where the old “Pipeline” table/UL was.)
+
+3) public/app.js — Performance Snapshot (less crammed)
+Replace your existing buildPerformanceCard function with this version (keeps same call sites):
+
+js
+Copy code
+async function buildPerformanceCard({ limit = 3 } = {}){
+  const data = await apiGet("/clients");
+  const rows = (data?.clients || [])
+    .map(c => ({
+      name: c.name,
+      perf: c.perfSpark || [],
+      ytd:  c.returns?.ytdPct ?? null
+    }))
+    .slice(0, limit);
+
+  const card = document.createElement("div");
+  card.className = "card perf-compact";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <div class="section-title">Performance Snapshot</div>
+        <div class="perf-actions">
+          <button class="btn-ghost" id="perf-all">View all</button>
+        </div>
+      </div>
+      <table class="table">
+        <thead><tr><th>Client</th><th style="width:170px;">Last 12m</th><th style="width:90px;">YTD</th><th style="width:90px;"></th></tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${r.name}</td>
+              <td class="spark-cell">${sparkline(r.perf)}</td>
+              <td>${r.ytd != null ? fmtPct(r.ytd) : "-"}</td>
+              <td><button class="btn-ghost" data-name="${r.name}">Open</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="subtle sep"></div>
+      <small class="subtle">Compact view shows top ${limit}. Use “View all” for the full list.</small>
+    </div>
+  `;
+  const tb = card.querySelector("tbody");
+  tb.addEventListener("click", (e) => {
+    const name = e.target?.dataset?.name;
+    if (!name) return;
+    state.view = "report";
+    state.reportCode = "PERF-ACB";
+    render();
+  });
+  card.querySelector("#perf-all").onclick = () => {
+    // Simple: reuse existing Clients page; or toggle a full table here if you prefer
+    state.view = "clients"; render();
+  };
+  return card;
+}
+If you want more than 3, change { limit: 3 } where you call it on the dashboard.
+
+4) public/app.js — Risk Overview (clean, two-column with collapsible detail)
+Add this helper near others:
+
+js
+Copy code
+function buildRiskOverviewCompact(risk){
+  // risk = { trackingErrorBps, var95_oneDayPct, var95_tenDayPct, beta, infoRatio, activeSharePct, factors: [...] }
+  const card = document.createElement("div");
+  card.className = "card";
+  const te = Number(risk?.trackingErrorBps ?? 0);
+  const tePct = Math.min(1, Math.abs(te) / 400); // normalize to 0..1 vs 400bps budget for bar
+  const var1 = Number(risk?.var95_oneDayPct ?? 0);
+  const var10 = Number(risk?.var95_tenDayPct ?? 0);
+  const beta = Number(risk?.beta ?? 1);
+  const ir = Number(risk?.infoRatio ?? 0);
+  const act = Number(risk?.activeSharePct ?? 0);
+
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Risk Overview</div>
+      <div class="risk-compact">
+        <div class="risk-stat">
+          <div class="risk-label">Tracking Error</div>
+          <div class="risk-value">${fmtBps(te)}</div>
+          <div class="risk-mini">Budget: 0–250 bps</div>
+          <div class="risk-bar" style="margin-top:8px;"><span style="right:${(100 - tePct*100).toFixed(1)}%"></span></div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">VaR (95%)</div>
+          <div class="risk-value">${var1.toFixed(1)}% (1-day)</div>
+          <div class="risk-mini">${var10.toFixed(1)}% (10-day)</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Beta</div>
+          <div class="risk-value">${beta.toFixed(2)}</div>
+          <div class="risk-mini">Info Ratio ${ir.toFixed(2)}</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Active Share</div>
+          <div class="risk-value">${act.toFixed(0)}%</div>
+          <div class="risk-mini">vs benchmark</div>
+        </div>
+      </div>
+
+      <details class="risk-collapsible">
+        <summary class="subtle">Factor Exposures (compact)</summary>
+        <div style="margin-top:8px;">
+          <table class="table">
+            <thead><tr><th>Factor</th><th style="width:80px;">Exposure</th></tr></thead>
+            <tbody>
+              ${(risk?.factors || []).slice(0,8).map(f => `
+                <tr>
+                  <td>${f.factor}</td>
+                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#b91c1c'}">${f.exposure.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  `;
+  return card;
+}
+Now, in your Portfolio Risk view (likely function ViewPortfolioRisk()), replace the top, busy risk summary block with:
+
+js
+Copy code
+// Fetch your existing risk payload (however you do today)
+const payload = await apiGet("/reports?code=RISK-PORTFOLIO"); // or your actual endpoint
+const risk = payload?.risk || payload?.metrics || payload || {};
+const compact = buildRiskOverviewCompact(risk);
+
+// Replace the old header section:
+body.innerHTML = "";
+body.appendChild(compact);
+
+// Then append any deep tables/charts below as *optional* sections or within <details>.
+(If your endpoint differs, map fields accordingly — the compact builder expects the metric names shown in the comments.)
