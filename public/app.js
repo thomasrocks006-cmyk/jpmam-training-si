@@ -189,7 +189,7 @@ function ViewAuth() {
         <div>
           <div class="flex-between">
             <label>Password</label>
-            <a class="link" id="forgot">Forgot password?</a>
+            <a class="link" id="forgot" style="font-size: 12px;">Forgot password?</a>
           </div>
           <input id="password" class="input" type="password" placeholder="••••••••"/>
         </div>
@@ -1144,23 +1144,23 @@ function ViewProfile() {
               <div class="form-row">
                 <div class="field">
                   <label class="label" for="team">Team/Department</label>
-                  <input id="team" class="input" placeholder="Asset Management"/>
+                  <input id="team" class="input" placeholder="Asset Management" disabled/>
                 </div>
                 <div class="field">
                   <label class="label" for="manager">Manager</label>
-                  <input id="manager" class="input" placeholder="Manager name"/>
+                  <input id="manager" class="input" placeholder="Manager name" disabled/>
                 </div>
               </div>
               <div class="form-row">
                 <div class="field">
                   <label class="label" for="costCenter">Cost Center</label>
-                  <input id="costCenter" class="input" placeholder="CC-001"/>
+                  <input id="costCenter" class="input" value="CC-037" disabled/>
                 </div>
                 <div class="field">
                   <label class="label" for="office">Office Location</label>
-                  <input id="office" class="input" placeholder="Sydney"/>
+                  <input id="office" class="input" placeholder="Sydney" disabled/>
                 </div>
-              </div>
+              </div></div>
               <div class="form-row">
                 <div class="field">
                   <label class="label" for="phone">Phone</label>
@@ -1273,10 +1273,10 @@ function ViewProfile() {
     card.querySelector("#employeeId").value = user?.employeeId || "";
     card.querySelector("#email").value = user?.email || "";
     card.querySelector("#dob").value = user?.dob || "";
-    card.querySelector("#team").value = user?.team || "";
-    card.querySelector("#manager").value = user?.manager || "";
-    card.querySelector("#costCenter").value = user?.costCenter || "";
-    card.querySelector("#office").value = user?.office || "";
+    card.querySelector("#team").value = user?.team || "Asset Management";
+    card.querySelector("#manager").value = user?.manager || "Thomas Smith";
+    card.querySelector("#costCenter").value = "CC-037";
+    card.querySelector("#office").value = user?.office || "Sydney";
     card.querySelector("#phone").value = user?.phone || "";
     card.querySelector("#role").value = user?.role || "";
 
@@ -1303,8 +1303,8 @@ function ViewProfile() {
       card.querySelector("#goAdmin").onclick = () => { state.view = "admin"; render(); };
     }
 
-    // Apply theme immediately
-    applyTheme(card.querySelector("#prefTheme").value);
+    // Apply theme immediately (force light theme for profile page)
+    applyTheme("light");
     card.querySelector("#prefTheme").onchange = (e)=> applyTheme(e.target.value);
 
     // Wire buttons
