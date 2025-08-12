@@ -45,3 +45,19 @@ small.muted{ color:#6b7280; }
 .tab.active { border-color:#111827; font-weight:600;}
 .section { padding: 16px; }
 
+/* Dropdown menu for "You ▾" */
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px);
+  width: 220px; background:#fff; border:1px solid var(--line);
+  border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,.06);
+  padding: 6px; display: none; z-index: 10;
+}
+.menu.open { display: block; }
+.menu-item {
+  width: 100%; text-align: left; background: transparent; border: none;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.menu-item:hover { background: #f8fafc; }
+.menu-divider { height: 1px; background: var(--line); margin: 6px 0; }
+

@@ -40,8 +40,10 @@ async function api(path, opts = {}) {
 function ViewAuth() {
   const root = document.createElement("div");
   root.className = "container";
+
   root.innerHTML = `
-    <div class="layout" style="grid-template-columns: 1fr;">
+    <div class="grid" style="grid-template-columns: 1fr; gap:16px;">
+      <!-- Sign in card -->
       <div class="card"><div class="p">
         <h2 style="margin-bottom:6px;">JPMorgan (Training)</h2>
         <small class="muted">Employee Access Portal — Asset Management</small>
@@ -52,16 +54,53 @@ function ViewAuth() {
         </div>
         <div style="height:10px;"></div>
         <div>
-          <label>Password</label>
+          <div class="flex-between">
+            <label>Password</label>
+            <a class="link" id="forgot">Forgot password?</a>
+          </div>
           <input id="password" class="input" type="password" placeholder="••••••••"/>
         </div>
         <div style="height:12px;"></div>
-        <button id="loginBtn" class="btn primary">Sign in</button>
+        <div class="flex-between">
+          <label><input id="remember" type="checkbox" checked> Remember this device</label>
+          <a class="link" id="help">Need help?</a>
+        </div>
+        <div style="height:12px;"></div>
+        <button id="loginBtn" class="btn primary" style="width:100%;">Sign in</button>
         <div style="height:8px;"></div>
         <small class="muted">By signing in you agree to JPMorgan (Training)'s acceptable use & security policy.</small>
       </div></div>
+
+      <!-- Security reminders -->
+      <div class="card"><div class="p">
+        <h3 style="margin-bottom:10px;">Security reminders</h3>
+        <ul style="padding-left:18px; line-height:1.7;">
+          <li>Only sign in on trusted domains.</li>
+          <li>Use a password manager and enable MFA.</li>
+          <li>Report suspicious messages to Security.</li>
+        </ul>
+      </div></div>
+
+      <!-- Single Sign-On -->
+      <div class="card"><div class="p">
+        <h3 style="margin-bottom:6px;">Single Sign-On</h3>
+        <small class="muted">Use your organization's identity provider.</small>
+        <div style="height:12px;"></div>
+        <div class="grid" style="grid-template-columns: 1fr; gap:10px; max-width:420px;">
+          <button class="btn" id="ssoSaml">🔑 SSO (SAML)</button>
+          <button class="btn" id="ssoOidc">🔑 SSO (OIDC)</button>
+        </div>
+        <div style="height:8px;"></div>
+        <small class="muted">Wire these to your auth backend (OAuth/OIDC, SAML).</small>
+      </div></div>
+
+      <div style="text-align:center;">
+        <small class="muted">© 2025 JPMorgan (Training). All rights reserved.</small>
+      </div>
     </div>
   `;
+
+  // Buttons
   root.querySelector("#loginBtn").onclick = async () => {
     const email = root.querySelector("#email").value.trim();
     const password = root.querySelector("#password").value;
@@ -76,6 +115,11 @@ function ViewAuth() {
       alert(e.message);
     }
   };
+  root.querySelector("#ssoSaml").onclick = () => alert("SSO (SAML) is mocked in this training build.");
+  root.querySelector("#ssoOidc").onclick = () => alert("SSO (OIDC) is mocked in this training build.");
+  root.querySelector("#forgot").onclick = () => alert("Password reset is disabled in this training build.");
+  root.querySelector("#help").onclick = () => alert("Contact your internal IT helpdesk (mock).");
+
   return root;
 }
 
@@ -124,13 +168,21 @@ function topNav() {
       <div class="toolbar">
         <button id="newBtn" class="btn">New</button>
         <button id="notifBtn" class="btn">🔔</button>
-        <div class="row">
+
+        <div class="menu-wrap">
           <button id="youBtn" class="btn">You ▾</button>
+          <div id="youMenu" class="menu">
+            <button class="menu-item" data-action="profile">👤 Profile & Settings</button>
+            <button class="menu-item" data-action="security">🔐 Security</button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" data-action="logout">🚪 Sign out</button>
+          </div>
         </div>
       </div>
     </div>
   `;
 
+  // --- search suggest logic (unchanged) ---
   const input = el.querySelector("#search");
   const suggest = el.querySelector("#suggest");
 
@@ -166,7 +218,6 @@ function topNav() {
     const active = suggest.querySelector(`li[data-idx="${state.activeIndex}"]`);
     if (active) active.classList.add("active");
   }
-
   input.oninput = updateSuggest;
   input.onkeydown = (e) => {
     if (!state.suggestions.length) return;
@@ -178,18 +229,42 @@ function topNav() {
       suggest.style.display = "none";
     }
   };
-
-  // '/' focuses search
   window.addEventListener("keydown", (e) => {
-    if (e.key === "/" && document.activeElement !== input) {
-      e.preventDefault();
-      input.focus();
-    }
+    if (e.key === "/" && document.activeElement !== input) { e.preventDefault(); input.focus(); }
   });
 
-  el.querySelector("#youBtn").onclick = () => {
-    setState({ view: "profile" });
+  // --- YOU menu dropdown ---
+  const youBtn = el.querySelector("#youBtn");
+  const youMenu = el.querySelector("#youMenu");
+  let menuOpen = false;
+
+  function setMenu(open) {
+    menuOpen = open;
+    youMenu.classList.toggle("open", open);
+  }
+
+  youBtn.onclick = (e) => {
+    e.stopPropagation();
+    setMenu(!menuOpen);
   };
+
+  youMenu.onclick = (e) => {
+    const action = e.target.closest(".menu-item")?.dataset?.action;
+    if (!action) return;
+    if (action === "profile") setState({ view: "profile" });
+    else if (action === "security") alert("Security center is mocked in this training build.");
+    else if (action === "logout") {
+      localStorage.removeItem("token");
+      setState({ token: null, user: null, view: "auth" });
+    }
+    setMenu(false);
+  };
+
+  // Close on outside click
+  document.addEventListener("click", (ev) => {
+    const within = ev.target === youBtn || youMenu.contains(ev.target);
+    if (!within) setMenu(false);
+  });
 
   return el;
 }
