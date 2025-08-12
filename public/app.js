@@ -588,43 +588,7 @@ function DashboardMain() {
   return root;
 }
 
-function ViewClientDetail() {
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
 
-  const main = document.createElement("div");
-  main.className = "card";
-  main.innerHTML = `<div class="p"><h2>Client: ${state.selectedClient}</h2><div id="body"><small class="muted">Loading…</small></div></div>`;
-  root.appendChild(main);
-
-  (async()=>{
-    try{
-      const data = await api(`/clients/${encodeURIComponent(state.selectedClient)}`);
-      const body = main.querySelector("#body");
-      body.innerHTML = `
-        <div class="grid" style="grid-template-columns: repeat(3,minmax(0,1fr));">
-          <div><small class="muted">Type</small><div><strong>${data.type}</strong></div></div>
-          <div><small class="muted">Strategies</small><div>${data.strategies.join(", ")}</div></div>
-          <div><small class="muted">SLA</small><div>${data.sla}</div></div>
-        </div>
-        <div style="height:12px;"></div>
-        <h3>Upcoming</h3>
-        <ul>
-          ${data.meetings.map(m=>`<li>${new Date(m.when).toLocaleString()} — ${m.topic}</li>`).join("")}
-        </ul>
-        <h3>Pipeline</h3>
-        <ul>
-          ${data.pipeline.map(p=>`<li>${p.stage} — <span class="muted">Due ${p.due}</span></li>`).join("")}
-        </ul>
-      `;
-    } catch(e){
-      main.querySelector("#body").innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
-    }
-  })();
-
-  return root;
-}
 
 function ViewReportDetail() {
   const root = document.createElement("div");
