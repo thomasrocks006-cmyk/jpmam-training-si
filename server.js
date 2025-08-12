@@ -17,6 +17,7 @@ import adminRoutes from "./routes/admin.js";
 import rfpsRoutes from "./routes/rfps.js";
 import usersRoutes from "./routes/users.js";
 import notificationsRoutes from "./routes/notifications.js";
+import digestsRoutes from "./routes/digests.js";
 import { initNotifier } from "./lib/notifier.js";
 
 dotenv.config();
@@ -59,6 +60,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/rfps", rfpsRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/digests", digestsRoutes);
 
 // Initialize the notifier to listen for dashboard events
 initNotifier();

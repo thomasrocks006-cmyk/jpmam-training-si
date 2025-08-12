@@ -47,6 +47,13 @@ async function notifReadAll(){
   return await api("/notifications/read-all", { method: "POST" });
 }
 
+// === Digests API ===
+async function digestRun(mode="daily"){
+  return await api("/digests/run", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ mode }) });
+}
+async function digestList(limit=5){ return await api(`/digests?limit=${limit}`); }
+async function digestGet(id){ return await api(`/digests/${encodeURIComponent(id)}`); }
+
 // === Profile & Settings API ===
 async function meGet(){ return await api("/users/me"); }
 async function meUpdate(payload){
@@ -476,7 +483,7 @@ function topNav() {
 
   // --- Notification bell setup ---
   const bellWrap = el.querySelector(".notif-wrap");
-  
+
   async function refreshBell(){
     try {
       const { notifications = [], unread = 0 } = await notifList();
@@ -906,7 +913,7 @@ function DashboardMain() {
       const me = await fetchMe();
       const allowLive = me?.preferences?.liveUpdates !== false; // default ON
       if (allowLive) {
-        connectDashStream({ 
+        connectDashStream({
           onEvent: (evt) => {
             // Refresh the dashboard when events occur
             console.log("Dashboard event:", evt);
@@ -1239,11 +1246,25 @@ function ViewProfile(){
           </div>
         </section>
 
+        <!-- Email Digest Panel -->
+        <section class="panel">
+          <div class="panel-title">Email Digest</div>
+          <div class="stack-12">
+            <div class="inline">
+              <button class="btn" id="genDigest">Generate Today's Digest</button>
+              <button class="btn-ghost" id="previewDigest">Preview Latest</button>
+            </div>
+            <div id="digestPreview" class="digest-preview"></div>
+          </div>
+        </section>
+
         <section class="panel">
           <div class="panel-title">Profile Completeness</div>
           <div class="stack-12">
-            <div class="progress"><span id="profProgress" style="width:0%"></span></div>
-            <small class="muted" id="profHint">Fill in your name, phone, and upload a photo to complete your profile.</small>
+            <div class="progress-wrap">
+              <div class="progress-bar" style="width:0%"></div>
+            </div>
+            <div class="muted small">0% complete • Missing: Name, Phone, and Profile Photo</div>
           </div>
         </section>
       </div>
@@ -1297,6 +1318,40 @@ function ViewProfile(){
     card.querySelector("#savePrefs").onclick   = onSavePrefs;
 
     card.querySelector("#prefTheme").onchange  = (e)=> applyTheme(e.target.value);
+
+    // Digest buttons
+    card.querySelector("#genDigest").onclick = async () => {
+      try {
+        const r = await digestRun("daily");
+        toast(`Generated ${r.generated} digest${r.generated===1?"":"s"}`);
+      } catch (e) {
+        alert(e.message || "Failed to generate digest");
+      }
+    };
+
+    card.querySelector("#previewDigest").onclick = async () => {
+      try {
+        const list = await digestList(1);
+        const latest = list?.digests?.[0];
+        if (!latest) {
+          card.querySelector("#digestPreview").innerHTML = `<div class="muted">No digest yet. Click "Generate Today's Digest".</div>`;
+          return;
+        }
+        const full = await digestGet(latest.id);
+        card.querySelector("#digestPreview").innerHTML = `
+          <div class="card" style="border:1px solid var(--line);">
+            <div class="p">
+              <div class="muted small">${new Date(full.ts).toLocaleString()}</div>
+              <div style="height:8px;"></div>
+              <div class="email" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;overflow:auto;">
+                ${full.bodyHtml}
+              </div>
+            </div>
+          </div>`;
+      } catch (e) {
+        alert(e.message || "Failed to load digest");
+      }
+    };
   })();
 
   function applyTheme(val){
@@ -1875,7 +1930,7 @@ function buildRiskOverviewCompact(risk){
               ${(risk?.factors || []).slice(0,8).map(f => `
                 <tr>
                   <td>${f.factor}</td>
-                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#b91c1c'}">${f.exposure.toFixed(2)}</td>
+                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#ef4444'}">${f.exposure.toFixed(2)}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -2410,7 +2465,6 @@ function ViewRfps(){
   wrap.className = "layout";
   root.appendChild(wrap);
 
-  // Sidebar
   wrap.appendChild(sidebar());
 
   // Main

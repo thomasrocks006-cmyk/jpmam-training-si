@@ -19,6 +19,8 @@ small.muted{ color:#6b7280; }
 .pill.escalated { background:#fef3c7; color:#92400e;}
 .table { width:100%; border-collapse: collapse;}
 .table th, .table td { padding:10px; border-top:1px solid var(--line); text-align:left; font-size: 14px;}
+.digest-preview .email table { width: 100%; }
+.digest-preview .email b { color: var(--fg); }
 .nav { border-bottom:1px solid var(--line); background:#fff; position: sticky; top:0; z-index:5;}
 .nav .inner { display:flex; gap:16px; align-items:center; height:56px; }
 .brand { font-weight:600; font-size: 18px;}
