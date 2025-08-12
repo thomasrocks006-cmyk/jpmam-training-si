@@ -16,6 +16,30 @@ function fmtBps(n) {
   return `${Number(n).toFixed(0)} bps`;
 }
 
+// Toasts
+function ensureToastHost() {
+  let host = document.getElementById("toast-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toast-host";
+    document.body.appendChild(host);
+  }
+  return host;
+}
+function toast(msg) {
+  const host = ensureToastHost();
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = msg;
+  host.appendChild(el);
+  // animate in
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 200);
+  }, 2600);
+}
+
 const state = {
   token: null,
   user: null,
@@ -27,6 +51,7 @@ const state = {
   approvals: [],
   // dashboard filter state
   pendingOnly: false,
+  highlightApprovalId: null,
   // view routing
   view: "auth", // auth -> mfa -> dashboard | client | report | profile | mandates | mandate
   selectedClient: null,
@@ -50,6 +75,10 @@ async function api(path, opts = {}) {
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
+
+const FILTER_KEY = "approvalsFilter";
+function saveApprovalsFilter(v){ try{ localStorage.setItem(FILTER_KEY, v);}catch{} }
+function loadApprovalsFilter(){ try{ return localStorage.getItem(FILTER_KEY) || "All"; }catch{ return "All"; } }
 
 // ---------- Views ----------
 function ViewAuth() {
@@ -164,29 +193,27 @@ function ViewMfa() {
 async function loadDashboard(openId, pendingOnly = false, openFirstPending = false) {
   try {
     const approvals = await api("/approvals");
-
-    // Set state (includes pending filter)
     setState({ approvals, pendingOnly });
 
-    // Defer drawer open until DOM renders Dashboard
     setTimeout(() => {
       // Priority 1: explicit ID
       if (openId) {
         const item = state.approvals.find(a => a.id === openId);
         if (item) {
-          setState({ view: "dashboard", drawerOpen: true, drawerItem: item, drawerTab: "details" });
+          setState({ view: "dashboard", drawerOpen: true, drawerItem: item, drawerTab: "details", highlightApprovalId: item.id });
+          toast(`Opened approval ${item.id}`);
           return;
         }
       }
-
-      // Priority 2: open first pending (if requested)
+      // Priority 2: first pending if requested
       if (openFirstPending) {
         const firstPending = (state.approvals || []).find(a => a.status === "Pending");
         if (firstPending) {
-          setState({ view: "dashboard", drawerOpen: true, drawerItem: firstPending, drawerTab: "details" });
+          setState({ view: "dashboard", drawerOpen: true, drawerItem: firstPending, drawerTab: "details", highlightApprovalId: firstPending.id });
+          toast(`Opened pending approval ${firstPending.id}`);
         } else {
-          // No pending items; still land on dashboard
           setState({ view: "dashboard" });
+          toast("No pending approvals");
         }
       }
     }, 50);
@@ -278,6 +305,20 @@ function topNav() {
   };
   window.addEventListener("keydown", (e) => {
     if (e.key === "/" && document.activeElement !== input) { e.preventDefault(); input.focus(); }
+  });
+
+  // Global keyboard shortcut: g+a for Pending Approvals
+  let _lastKey = null, _lastTs = 0;
+  window.addEventListener("keydown", (e) => {
+    const now = Date.now();
+    if (_lastKey === "g" && e.key.toLowerCase() === "a" && (now - _lastTs) < 1000) {
+      e.preventDefault();
+      openApprovalsPending();
+      _lastKey = null; _lastTs = 0;
+      return;
+    }
+    _lastKey = e.key.toLowerCase();
+    _lastTs = now;
   });
 
   // --- YOU menu dropdown ---
@@ -573,20 +614,36 @@ function DashboardMain() {
   const tbody = approvalsCard.querySelector("tbody");
   const drawRows = () => {
     const select = approvalsCard.querySelector("#filt");
-    // If we came here via the Approvals icon, force the dropdown to Pending once
-    if (state.pendingOnly && select.value !== "Pending") {
-      select.value = "Pending";
-    }
+    if (state.pendingOnly && select.value !== "Pending") select.value = "Pending";
     const filt = select.value;
+    saveApprovalsFilter(filt);
 
     tbody.innerHTML = "";
     state.approvals
       .filter(a => (filt === "All" ? true : a.status === filt))
       .filter(a => [a.id, a.requester, a.dept].some(s => s.toLowerCase().includes(state.query.toLowerCase())))
-      .forEach(a => tbody.appendChild(ApprovalRow(a)));
+      .forEach(a => {
+        const row = ApprovalRow(a);
+        row.setAttribute("data-approval-id", a.id);
+        tbody.appendChild(row);
+      });
+
+    // Briefly highlight the targeted row (if any)
+    if (state.highlightApprovalId) {
+      const target = tbody.querySelector(`[data-approval-id="${state.highlightApprovalId}"]`);
+      if (target) {
+        target.classList.add("row-blink");
+        setTimeout(() => target && target.classList.remove("row-blink"), 1200);
+      }
+      state.highlightApprovalId = null;
+    }
   };
   const select = approvalsCard.querySelector("#filt");
-  if (state.pendingOnly) select.value = "Pending";
+  if (state.pendingOnly) {
+    select.value = "Pending";
+  } else {
+    select.value = loadApprovalsFilter();
+  }
   
   select.onchange = drawRows;
   drawRows();
@@ -1218,12 +1275,11 @@ function ViewMandateDetail() {
 
 
 function openApprovalById(id) {
-  setState({ view: "dashboard", drawerOpen: false, drawerItem: null });
-  loadDashboard(id, false);
+  setState({ view: "dashboard", drawerOpen: false, drawerItem: null, highlightApprovalId: id });
+  loadDashboard(id, false, false);
 }
 
 function openApprovalsPending() {
-  // Navigate to dashboard filtered to Pending, and auto-open the first pending item
   setState({ view: "dashboard", drawerOpen: false, drawerItem: null });
   loadDashboard(undefined, true, true);
 }
