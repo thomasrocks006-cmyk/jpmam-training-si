@@ -1,0 +1,197 @@
+function ViewMandates() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandates</h2>
+        <div class="row">
+          <input id="q" class="input" placeholder="Filter mandates…" style="width:260px;">
+          <button id="refresh" class="btn">Refresh</button>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <div style="overflow:auto;">
+        <table class="table" id="tbl">
+          <thead><tr>
+            <th>ID</th><th>Client</th><th>Strategy</th><th>Benchmark</th><th>AUM (AUD)</th><th>Fee (bps)</th><th>Inception</th><th>Breaches</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  root.appendChild(card);
+
+  const tbody = card.querySelector("tbody");
+  const q = card.querySelector("#q");
+
+  async function load() {
+    const list = await api("/mandates");
+    state._mandatesList = list;
+    draw(list);
+  }
+  function draw(list) {
+    tbody.innerHTML = "";
+    list.forEach(m => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><a class="link" href="#">${m.id}</a></td>
+        <td>${m.client}</td>
+        <td>${m.strategy}</td>
+        <td>${m.benchmark}</td>
+        <td>${formatAUD(m.aumAud)}</td>
+        <td>${m.feeBps}</td>
+        <td>${m.inception}</td>
+        <td>${m.openBreaches}</td>
+      `;
+      tr.querySelector("a").onclick = (e) => { e.preventDefault(); setState({ view: "mandate", selectedMandate: m.id }); };
+      tbody.appendChild(tr);
+    });
+  }
+
+  q.oninput = () => {
+    const term = q.value.trim().toLowerCase();
+    const list = (state._mandatesList || []).filter(m =>
+      [m.id, m.client, m.strategy, m.benchmark].some(s => s.toLowerCase().includes(term))
+    );
+    draw(list);
+  };
+
+  card.querySelector("#refresh").onclick = load;
+  load().catch(e => alert(e.message));
+  return root;
+}
+
+function ViewMandateDetail() {
+  const id = state.selectedMandate;
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandate: ${id}</h2>
+        <button id="back" class="btn">← All Mandates</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div class="grid" style="grid-template-columns: repeat(4,minmax(0,1fr));">
+        <div class="card"><div class="p"><small class="muted">Client</small><h3 id="c_client">—</h3></div></div>
+        <div class="card"><div class="p"><small class="muted">Strategy</small><h3 id="c_strategy">—</h3></div></div>
+        <div class="card"><div class="p"><small class="muted">Benchmark</small><h3 id="c_bench">—</h3></div></div>
+        <div class="card"><div class="p"><small class="muted">AUM (AUD)</small><h3 id="c_aum">—</h3></div></div>
+      </div>
+
+      <div style="height:14px;"></div>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap:16px;">
+        <div class="card"><div class="p">
+          <h3>Investment Objective</h3>
+          <p id="obj" class="kv"></p>
+          <h3>Guidelines</h3>
+          <ul id="gl"></ul>
+          <h3>SLA Deliverables</h3>
+          <table class="table"><thead><tr><th>ID</th><th>Name</th><th>Frequency</th><th>Next Due</th></tr></thead><tbody id="sla"></tbody></table>
+        </div></div>
+
+        <div class="card"><div class="p">
+          <div class="flex-between">
+            <h3>Compliance Breaches</h3>
+            <button id="logBreach" class="btn">Log breach</button>
+          </div>
+          <div style="height:8px;"></div>
+          <table class="table"><thead><tr><th>ID</th><th>When</th><th>Type</th><th>Detail</th><th>Status</th><th>Approval</th><th></th></tr></thead><tbody id="br"></tbody></table>
+        </div></div>
+      </div>
+    </div>
+  `;
+  root.appendChild(card);
+
+  card.querySelector("#back").onclick = () => setState({ view: "mandates" });
+
+  const c_client = card.querySelector("#c_client");
+  const c_strategy = card.querySelector("#c_strategy");
+  const c_bench = card.querySelector("#c_bench");
+  const c_aum = card.querySelector("#c_aum");
+  const obj = card.querySelector("#obj");
+  const gl = card.querySelector("#gl");
+  const sla = card.querySelector("#sla");
+  const br = card.querySelector("#br");
+
+  let data = null;
+
+  (async()=>{
+    try{
+      data = await api(`/mandates/${encodeURIComponent(id)}`);
+      c_client.textContent = data.client;
+      c_strategy.textContent = data.strategy;
+      c_bench.textContent = data.benchmark;
+      c_aum.textContent = formatAUD(data.aumAud);
+      obj.textContent = data.objective;
+      gl.innerHTML = data.guidelines.map(s=>`<li>${s}</li>`).join("");
+      sla.innerHTML = data.sla.map(s=>`<tr><td>${s.id}</td><td>${s.name}</td><td>${s.freq}</td><td>${s.nextDue}</td></tr>`).join("");
+      drawBreaches();
+    } catch(e){ alert(e.message); }
+  })();
+
+  function drawBreaches() {
+    br.innerHTML = (data.breaches||[]).map(b=>`
+      <tr>
+        <td>${b.id}</td>
+        <td>${new Date(b.when).toLocaleString()}</td>
+        <td>${b.type}</td>
+        <td>${b.detail}</td>
+        <td>${b.status}</td>
+        <td>${b.approvalId || "—"}</td>
+        <td>${b.status!=="Closed" ? `<button class="btn" data-close="${b.id}">Close</button>` : ""}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="7" class="muted">No breaches logged.</td></tr>`;
+
+    br.querySelectorAll("[data-close]").forEach(btn => {
+      btn.onclick = async () => {
+        const bid = btn.getAttribute("data-close");
+        try {
+          await api(`/mandates/${encodeURIComponent(id)}/breaches/${encodeURIComponent(bid)}/close`, { method: "POST" });
+          const b = data.breaches.find(x=>x.id===bid); if (b) b.status = "Closed";
+          drawBreaches();
+        } catch(e){ alert(e.message); }
+      };
+    });
+  }
+
+  card.querySelector("#logBreach").onclick = async () => {
+    const type = prompt("Breach type (e.g., Sector limit, TE band, Issuer limit)");
+    if (!type) return;
+    const detail = prompt("Breach detail (what happened?)");
+    if (!detail) return;
+    try{
+      const b = await api(`/mandates/${encodeURIComponent(id)}/breaches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, detail, raiseApproval: true })
+      });
+      // Optionally also create a formal Approval item using the existing endpoint:
+      await api("/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requester: "Risk",
+          dept: data.strategy.includes("Equity") ? "Equities" : "Fixed Income",
+          amount: 0,
+          docs: [{ name: `Breach-${b.id}.pdf`, type: "PDF", size: "—" }]
+        })
+      });
+      data.breaches.unshift(b);
+      drawBreaches();
+      alert(`Breach logged. Approval placeholder: ${b.approvalId || "—"}`);
+    } catch(e){ alert(e.message); }
+  };
+
+  return root;
+}

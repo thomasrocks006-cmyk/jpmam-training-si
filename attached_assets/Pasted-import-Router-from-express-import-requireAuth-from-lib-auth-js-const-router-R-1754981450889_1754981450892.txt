@@ -1,0 +1,121 @@
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+
+const router = Router();
+
+/**
+ * In-memory demo store (resets on restart).
+ * Two mandates tied to SunSuper & QBE Insurance.
+ */
+const DB = {
+  mandates: [
+    {
+      id: "M-AUS-EQ-SS-001",
+      client: "SunSuper",
+      strategy: "Australian Equity Core",
+      objective: "Outperform S&P/ASX 200 (TR) by 100–150 bps p.a. over rolling 3 years.",
+      benchmark: "S&P/ASX 200 (TR)",
+      baseCurrency: "AUD",
+      inception: "2022-02-01",
+      aumAud: 4200000000,
+      feeBps: 28,
+      guidelines: [
+        "Max single stock weight: 10%",
+        "Tracking error: 1.5% – 3.0%",
+        "Sector active weight: ±8%",
+        "Cash range: 0% – 10%"
+      ],
+      sla: [
+        { id: "SLA-SS-01", name: "Monthly SLA report", freq: "Monthly", nextDue: "2025-08-15" },
+        { id: "SLA-SS-02", name: "Quarterly review pack", freq: "Quarterly", nextDue: "2025-10-15" }
+      ],
+      breaches: [
+        // { id, when, type, detail, status, approvalId? }
+      ]
+    },
+    {
+      id: "M-AUS-LDI-QBE-001",
+      client: "QBE Insurance",
+      strategy: "LDI / Liability-Aware Fixed Income",
+      objective: "Minimise surplus volatility vs. liability curve while meeting cashflow needs.",
+      benchmark: "Custom LDI Composite",
+      baseCurrency: "AUD",
+      inception: "2021-09-15",
+      aumAud: 2850000000,
+      feeBps: 20,
+      guidelines: [
+        "Key rate DV01 ±10% vs. liability curve",
+        "Credit rating floor: BBB-",
+        "Issuer limit: 3%",
+        "Cash buffer: 5% – 10%"
+      ],
+      sla: [
+        { id: "SLA-QBE-01", name: "Quarterly SLA report", freq: "Quarterly", nextDue: "2025-09-20" },
+        { id: "SLA-QBE-02", name: "ALM constraint attestation", freq: "Semi-annual", nextDue: "2026-01-15" }
+      ],
+      breaches: []
+    }
+  ]
+};
+
+// List
+router.get("/", requireAuth, (req, res) => {
+  res.json(DB.mandates.map(m => ({
+    id: m.id,
+    client: m.client,
+    strategy: m.strategy,
+    benchmark: m.benchmark,
+    aumAud: m.aumAud,
+    feeBps: m.feeBps,
+    inception: m.inception,
+    openBreaches: m.breaches.filter(b => b.status !== "Closed").length
+  })));
+});
+
+// Detail
+router.get("/:id", requireAuth, (req, res) => {
+  const m = DB.mandates.find(x => x.id.toLowerCase() === req.params.id.toLowerCase());
+  if (!m) return res.status(404).json({ error: "Mandate not found" });
+  res.json(m);
+});
+
+// Log a breach (optionally raise an approval through the approvals API upstream)
+router.post("/:id/breaches", requireAuth, async (req, res) => {
+  const m = DB.mandates.find(x => x.id.toLowerCase() === req.params.id.toLowerCase());
+  if (!m) return res.status(404).json({ error: "Mandate not found" });
+
+  const { type, detail, raiseApproval = true } = req.body || {};
+  if (!type || !detail) return res.status(400).json({ error: "Missing type or detail" });
+
+  const breach = {
+    id: `BR-${Date.now()}`,
+    when: new Date().toISOString(),
+    type: String(type),
+    detail: String(detail),
+    status: "Open"
+  };
+
+  // Optionally create an approval item by calling our own approvals route (same server)
+  let approvalId = null;
+  if (raiseApproval) {
+    // We can't import the router here; instead client UI will call /approvals after this,
+    // or we could do a local fetch if we had the server base. Keep simple: just attach a mock ID.
+    approvalId = `AM-${String(Date.now()).slice(-5)}`;
+    breach.approvalId = approvalId;
+  }
+
+  m.breaches.unshift(breach);
+  res.status(201).json(breach);
+});
+
+// Close a breach
+router.post("/:id/breaches/:bid/close", requireAuth, (req, res) => {
+  const m = DB.mandates.find(x => x.id.toLowerCase() === req.params.id.toLowerCase());
+  if (!m) return res.status(404).json({ error: "Mandate not found" });
+  const b = m.breaches.find(x => x.id === req.params.bid);
+  if (!b) return res.status(404).json({ error: "Breach not found" });
+  b.status = "Closed";
+  res.json(b);
+});
+
+export default router;
