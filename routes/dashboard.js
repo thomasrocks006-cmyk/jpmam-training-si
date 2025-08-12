@@ -1,0 +1,57 @@
+
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+import { readJson } from "../lib/store.js";
+
+const router = Router();
+
+// Simple in-memory "activity feed" that resets on restart
+let ACTIVITY = [
+  { id: "EV-001", ts: new Date(Date.now() - 1000*60*15).toISOString(), type: "approval", status: "Created",  ref: "AM-52731",     text: "Trade exception request created for AU EQ book." },
+  { id: "EV-002", ts: new Date(Date.now() - 1000*60*12).toISOString(), type: "report",   status: "Generated", ref: "RISK-VaR-TE",   text: "Risk – VaR & Tracking Error by Fund generated for SunSuper." },
+  { id: "EV-003", ts: new Date(Date.now() - 1000*60*6 ).toISOString(), type: "rfp",      status: "Status",    ref: "RFP-SS-24Q3",   text: "RFP moved to Draft for SunSuper." },
+  { id: "EV-004", ts: new Date(Date.now() - 1000*60*3 ).toISOString(), type: "breach",   status: "Resolved",  ref: "BR-SS-0007",    text: "Tracking error outside band — acknowledged and resolved." }
+];
+
+// Metrics
+router.get("/metrics", requireAuth, (_req, res) => {
+  const approvals = readJson("approvals.json");
+  const pending = approvals.filter(a => a.status === "Pending").length;
+  const approved = approvals.filter(a => a.status === "Approved").length;
+
+  // Keep in sync with routes/clients.js (SunSuper + QBE aumAud)
+  const aums = [4200000000, 2850000000];
+  const totalAumAud = aums.reduce((a,b)=>a+b, 0);
+  const mtdChangePct = 1.9; // mock MTD%
+
+  const breachesLast30 = 0; // update once you log breaches
+
+  const today = new Date();
+  const in7   = new Date(today.getTime() + 7*24*60*60*1000);
+  const meetings = [
+    { client: "SunSuper",      when: "2025-08-14T02:00:00Z", topic: "Q2 Performance Review" },
+    { client: "QBE Insurance", when: "2025-08-18T01:00:00Z", topic: "LDI Constraint Review" },
+  ].filter(m => {
+    const d = new Date(m.when);
+    return d >= today && d <= in7;
+  });
+
+  res.json({
+    totalAumAud,
+    mtdChangePct,
+    approvals: { pending, approved },
+    breachesLast30,
+    meetings,
+    lastUpdated: new Date().toISOString()
+  });
+});
+
+// Recent activity
+router.get("/activity", requireAuth, (_req, res) => {
+  const feed = [...ACTIVITY]
+    .sort((a,b) => new Date(b.ts) - new Date(a.ts))
+    .slice(0, 20);
+  res.json({ feed, lastUpdated: new Date().toISOString() });
+});
+
+export default router;
