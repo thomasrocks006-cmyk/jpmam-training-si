@@ -1,0 +1,139 @@
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
+import { fmtAUD, fmtPct, fmtBps } from "../lib/format";
+
+function Bar({ value, max = 5, color = "#0ea5e9" }) {
+  const width = Math.min(100, Math.abs(value) / max * 100);
+  const bg = value >= 0 ? color : "#ef4444";
+  return (
+    <div style={{ background: "#0b1320", border: "1px solid #1f2937", height: 8, borderRadius: 4, overflow: "hidden", width: "100%" }}>
+      <div style={{ width: `${width}%`, height: "100%", background: bg }} />
+    </div>
+  );
+}
+
+export default function PortfolioRisk() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    api("/reports/RISK-PORTFOLIO").then(setData).catch(e => setErr(e.message));
+  }, []);
+
+  if (err) return <div className="content" style={{ color: "#ef4444" }}>{err}</div>;
+  if (!data) return <div className="content">Loading…</div>;
+
+  const m = data.metrics || {};
+  const sectors = data.sectorExposures || [];
+  const factors = data.factorExposures || [];
+  const contrib = data.topContributorsBps || [];
+  const scenarios = data.scenarios || [];
+
+  return (
+    <div className="content">
+      <div className="row">
+        {/* Main Card */}
+        <div className="card" style={{ flex: 2 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>Portfolio Risk — {data.portfolio?.name}</div>
+              <div style={{ color: "#9ca3af", fontSize: 12 }}>Benchmark: {data.portfolio?.benchmark}</div>
+            </div>
+            <div style={{ color: "#9ca3af", fontSize: 12 }}>As of: {new Date(data.asOf).toLocaleString()}</div>
+          </div>
+
+          {/* KPI Cards */}
+          <div className="row" style={{ marginTop: 12 }}>
+            <div className="card kpi"><div>Tracking Error</div><div style={{ fontWeight: 700, fontSize: 20 }}>{fmtPct(m.trackingErrorPct)}</div></div>
+            <div className="card kpi"><div>Beta</div><div style={{ fontWeight: 700, fontSize: 20 }}>{m.beta?.toFixed(2)}</div></div>
+            <div className="card kpi"><div>VaR 95% (1d)</div><div style={{ fontWeight: 700, fontSize: 20 }}>{fmtPct(m.var95_oneDayPct)}</div></div>
+            <div className="card kpi"><div>Active Share</div><div style={{ fontWeight: 700, fontSize: 20 }}>{fmtPct(m.activeSharePct)}</div></div>
+          </div>
+
+          {/* Sector & Factor Tables */}
+          <div className="row" style={{ marginTop: 12 }}>
+            <div className="card" style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Sector exposures</div>
+              <table className="table">
+                <thead><tr><th>Sector</th><th>Port</th><th>Bench</th><th>Active</th><th> </th></tr></thead>
+                <tbody>
+                  {sectors.map(s => (
+                    <tr key={s.sector}>
+                      <td>{s.sector}</td>
+                      <td>{fmtPct(s.portWtPct)}</td>
+                      <td>{fmtPct(s.benchWtPct)}</td>
+                      <td style={{ color: s.activePct >= 0 ? "#10b981" : "#ef4444" }}>{fmtPct(s.activePct)}</td>
+                      <td><Bar value={s.activePct} max={5} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card" style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Factor exposures</div>
+              <table className="table">
+                <thead><tr><th>Factor</th><th>Exposure</th><th> </th></tr></thead>
+                <tbody>
+                  {factors.map(f => (
+                    <tr key={f.factor}>
+                      <td>{f.factor}</td>
+                      <td style={{ color: f.exposure >= 0 ? "#10b981" : "#ef4444" }}>{f.exposure.toFixed(2)}</td>
+                      <td><Bar value={f.exposure} max={0.5} color="#8b5cf6" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Contributors & Scenarios */}
+          <div className="row" style={{ marginTop: 12 }}>
+            <div className="card" style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Top contributors (bps)</div>
+              <ul>
+                {contrib.map((c, i) => (
+                  <li key={i} style={{ marginBottom: 6, color: c.contribBps >= 0 ? "#e5e7eb" : "#ef4444" }}>
+                    {c.name} — <b>{fmtBps(c.contribBps)}</b>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="card" style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8 }}>Scenarios</div>
+              <table className="table">
+                <thead><tr><th>Scenario</th><th>Shock</th><th>PnL (bps)</th></tr></thead>
+                <tbody>
+                  {scenarios.map((s, i) => (
+                    <tr key={i}>
+                      <td>{s.name}</td>
+                      <td>{s.shock}</td>
+                      <td style={{ color: s.pnlBps >= 0 ? "#10b981" : "#ef4444" }}>{fmtBps(s.pnlBps)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="button">Download CSV (mock)</button>
+            <button className="button">Export PDF (mock)</button>
+          </div>
+        </div>
+
+        {/* Sidebar Card */}
+        <div className="card" style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Portfolio</div>
+          <div>AUM: <b>{fmtAUD(data.portfolio?.aumAud || 0)}</b></div>
+          <div>Name: {data.portfolio?.name}</div>
+          <div>Benchmark: {data.portfolio?.benchmark}</div>
+          <div style={{ marginTop: 12, fontSize: 12, color: "#9ca3af" }}>
+            All figures are mock and for training only.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
