@@ -133,6 +133,41 @@ ul li { margin: 6px 0; }
 .metric-tile.hover { cursor:pointer; transition: transform .06s ease; }
 .metric-tile.hover:hover { transform: translateY(-1px); }
 
+/* --- Compact, breathable UI for pipeline, performance, risk --- */
+.section-title { font-size: 15px; font-weight: 600; margin: 2px 0 8px; }
+.subtle { color:#6b7280; }
+.sep { height:1px; background:var(--line); margin:10px 0; }
+
+.card .p { padding: 14px 16px; }          /* a touch more breathing room */
+.table th, .table td { padding: 8px 10px; line-height: 1.35; }
+
+/* Pipeline */
+.pipeline-box { display:flex; flex-direction: column; gap: 10px; }
+.pipeline-step { display:grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; padding: 6px 0; }
+.pipeline-dot { width:10px; height:10px; border-radius:50%; background:#9ca3af; }
+.pipeline-step.active .pipeline-dot { background:#2563eb; }
+.pipeline-meta { display:flex; gap:10px; flex-wrap:wrap; }
+.pipeline-note { color:#4b5563; }
+
+/* Performance compact */
+.perf-compact table { width:100%; }
+.perf-compact .spark-cell svg { height:28px; }
+.perf-compact .muted { color:#6b7280; }
+.perf-actions { display:flex; justify-content:flex-end; gap:8px; }
+
+/* Risk overview compact */
+.risk-compact { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.risk-stat { border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; }
+.risk-label { font-size:12px; color:#6b7280; }
+.risk-value { font-size:18px; font-weight:700; margin-top:2px; }
+.risk-mini { font-size:12px; color:#6b7280; }
+.risk-collapsible { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; }
+.risk-bar { height:6px; border-radius:4px; background:#e5e7eb; position:relative; overflow:hidden; }
+.risk-bar > span { position:absolute; inset:0 100% 0 0; background:#8b5cf6; }
+@media (max-width: 900px){
+  .risk-compact { grid-template-columns: 1fr; }
+} }
+
 .dashboard-grid { display:grid; grid-template-columns: 1.1fr 1fr 1.2fr; gap: 16px; }
 .activity-feed { display:flex; flex-direction: column; gap: 10px; }
 .activity-row { display:grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 8px 0; border-bottom:1px dashed var(--line); }

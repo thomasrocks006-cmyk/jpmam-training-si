@@ -654,208 +654,48 @@ function DashboardMain() {
   drawRows();
   state.pendingOnly = false;
 
-  // === Dashboard enhancement functions ===
-  async function fetchDashboardMetrics() { 
-    return {
-      aum: 128.4e9,
-      mandates: 84,
-      exceptions: 5,
-      attestations: 2
-    }; 
-  }
   
-  async function fetchActivity() { 
-    return [
-      { type: 'meeting', text: 'Client meeting set: SunSuper (Performance Review)', id: 'MEET-SUSU' },
-      { type: 'rfp', text: 'RFP draft uploaded for QBE Insurance LDI', id: 'RFP-QBE' },
-      { type: 'report', text: 'Quarterly factsheet generated: Aus Core Bond', id: 'FS-ACB' },
-      { type: 'mandate', text: 'Mandate change request: Real Assets tilt', id: 'MCR-RA' }
-    ]; 
-  }
-  
-  async function fetchMarketSnapshot() { 
-    return {
-      asx200: -0.34,
-      audUsd: { rate: 0.67, change: 0.12 },
-      sp500: 0.28
-    }; 
-  }
 
-  async function fetchDashboardAlerts() {
-    return [
-      { id: 1, severity: 'medium', text: 'Compliance deadline approaching', type: 'compliance' },
-      { id: 2, severity: 'low', text: '3 informational notices from Security Center', type: 'security' }
-    ];
-  }
-
-  async function fetchDashboardDeadlines() {
-    return [
-      { task: 'SunSuper — Upload Q2 performance deck', owner: 'You', due: 'Fri' },
-      { task: 'QBE Insurance — Confirm fee schedule redlines', owner: 'Legal', due: 'Wed' },
-      { task: 'SunSuper — SLA report sign-off', owner: 'Reporting', due: 'Mon' }
-    ];
-  }
-
-  function buildAlertsCard(alerts) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="p">
-        <h3>Alerts</h3>
-        ${alerts.length ? alerts.map(a => `
-          <div class="alert-row">
-            <div class="alert-main">
-              <span class="badge ${a.severity}">${a.severity.toUpperCase()}</span>
-              ${a.text}
-            </div>
-          </div>
-        `).join('') : '<p class="muted">No critical alerts.</p>'}
-      </div>
-    `;
-    return card;
-  }
-
-  function buildDeadlinesCard(deadlines) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="p">
-        <h3>Client Tasks</h3>
-        <ul>
-          ${deadlines.map(d => `
-            <li>${d.task} <span class="muted">(owner: ${d.owner} · due ${d.due})</span></li>
-          `).join('')}
-        </ul>
-      </div>
-    `;
-    return card;
-  }
-
-  async function buildPerformanceCard() {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="p">
-        <h3>Performance Snapshot</h3>
-        <ul>
-          <li>Aus Core Bond vs AusBond Composite — <strong>+62 bps (1Y)</strong></li>
-          <li>Australian Equity Core vs S&P/ASX 200 — <strong>+48 bps (3Y ann.)</strong></li>
-          <li>Real Assets Income — <strong>+5.1% (YTD)</strong></li>
-        </ul>
-      </div>
-    `;
-    return card;
-  }
-  function buildMetricsRow(metrics) {
-    const card = document.createElement("div");
-    card.className = "metrics-row grid-4";
-    card.innerHTML = `
-      <div class="card metric-tile"><div class="p">
-        <small class="muted">AUM (Australia)</small>
-        <h2 class="metric-val">A$128.4bn</h2>
-        <small class="muted">+ A$320m net flows today</small>
-      </div></div>
-      <div class="card metric-tile"><div class="p">
-        <small class="muted">Active Mandates</small>
-        <h2 class="metric-val">84</h2>
-        <small class="muted">12 in transition</small>
-      </div></div>
-      <div class="card metric-tile"><div class="p">
-        <small class="muted">Trade Exceptions</small>
-        <h2 class="metric-val">5</h2>
-        <small class="muted">2 require action</small>
-      </div></div>
-      <div class="card metric-tile"><div class="p">
-        <small class="muted">Compliance Attestations</small>
-        <h2 class="metric-val">2 due</h2>
-        <small class="muted">Quarterly certifications</small>
-      </div></div>
-    `;
-    return card;
-  }
-  
-  function buildActivityFeed(activity) {
-    const card = document.createElement("div");
-    card.className = "card activity-feed";
-    card.innerHTML = `
-      <div class="p">
-        <h3>Client & Portfolio Activity</h3>
-        <ul>
-          ${activity.map(a => `<li>${a.text} · ${a.id}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-    return card;
-  }
-  
-  function buildMarketSnapshot(market) {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="p">
-        <h3>Market Snapshot</h3>
-        <div class="market-grid">
-          <div class="mkt-item">
-            <small class="muted">ASX 200</small>
-            <div class="mkt-val ${market.asx200 >= 0 ? 'pos' : 'neg'}">${market.asx200 >= 0 ? '+' : ''}${market.asx200}%</div>
-          </div>
-          <div class="mkt-item">
-            <small class="muted">AUD/USD</small>
-            <div class="mkt-val pos">${market.audUsd.rate}</div>
-            <div class="mkt-val pos">+${market.audUsd.change}%</div>
-          </div>
-          <div class="mkt-item">
-            <small class="muted">S&P 500</small>
-            <div class="mkt-val pos">+${market.sp500}%</div>
-          </div>
-        </div>
-        <small class="muted">Last updated: ${new Date().toLocaleTimeString()}</small>
-      </div>
-    `;
-    return card;
-  }
-
-  // === NEW: Enhanced Dashboard Layout ===
+  // === Enhanced Dashboard Layout ===
   (async () => {
     try {
-      const metrics = await fetchDashboardMetrics();
-      const activity = await fetchActivity();
-      const market = await fetchMarketSnapshot();
-      const alerts = await fetchDashboardAlerts();
-      const deadlines = await fetchDashboardDeadlines();
+      // Use the new compact builders
+      const perfCard = await buildPerformanceCard({ limit: 3 });
+      const riskCard = buildRiskOverviewCompact({
+        trackingErrorBps: 120,
+        var95_oneDayPct: 1.2,
+        var95_tenDayPct: 3.8,
+        beta: 1.05,
+        infoRatio: 0.42,
+        activeSharePct: 35,
+        factors: [
+          { factor: "Value", exposure: 0.15 },
+          { factor: "Growth", exposure: -0.08 },
+          { factor: "Quality", exposure: 0.22 },
+          { factor: "Momentum", exposure: 0.05 }
+        ]
+      });
+      
+      const pipelineCard = buildPipelineBox([
+        { stage: "SunSuper RFP Draft", due: "2025-08-14", owner: "Legal", note: "Performance Review" },
+        { stage: "QBE Insurance LDI Review", due: "2025-08-18", owner: "Portfolio", note: "Constraint updates" },
+        { stage: "Pacific Rail Pension Discovery", due: "2025-08-20", owner: "Sales", note: "Real Assets mandate" }
+      ]);
 
-      const row = buildMetricsRow(metrics);
-      const activityCard = buildActivityFeed(activity);
-      const marketCard = buildMarketSnapshot(market);
-      const alertsCard = buildAlertsCard(alerts);
-      const deadlinesCard = buildDeadlinesCard(deadlines);
-      const perfCard = await buildPerformanceCard();
-
-      const grid = document.createElement("div");
-      grid.className = "dashboard-grid";
-      const col1 = document.createElement("div");
-      const col2 = document.createElement("div");
-      const col3 = document.createElement("div");
-
-      // Column 1: Metrics + Market + Alerts
-      col1.appendChild(row);
-      col1.appendChild(marketCard);
-      col1.appendChild(alertsCard);
-
-      // Column 2: Activity + Deadlines
-      col2.appendChild(activityCard);
-      col2.appendChild(deadlinesCard);
-
-      // Column 3: Performance
-      col3.appendChild(perfCard);
-
-      grid.appendChild(col1);
-      grid.appendChild(col2);
-      grid.appendChild(col3);
-      main.appendChild(grid);
+      // Simple grid layout
+      const enhancedGrid = document.createElement("div");
+      enhancedGrid.className = "grid";
+      enhancedGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(320px, 1fr))";
+      enhancedGrid.style.gap = "16px";
+      enhancedGrid.style.marginBottom = "16px";
+      
+      enhancedGrid.appendChild(pipelineCard);
+      enhancedGrid.appendChild(perfCard);
+      enhancedGrid.appendChild(riskCard);
+      
+      main.appendChild(enhancedGrid);
     } catch (e) {
       console.error("Dashboard enhancements failed", e);
-      // Fallback - just show the basic content that was already working
     }
   })();
 
@@ -1333,6 +1173,167 @@ function buildBreachesPanel(mandate){
 }
 
   return root;
+}
+
+// --- Mandate Pipeline (compact) ---
+function buildPipelineBox(pipeline = []) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Mandate Pipeline</div>
+      <div class="pipeline-box"></div>
+    </div>
+  `;
+  const box = card.querySelector(".pipeline-box");
+  if (!pipeline.length){
+    box.innerHTML = `<div class="subtle">No pipeline items.</div>`;
+    return card;
+  }
+  pipeline.forEach((step, i) => {
+    const { stage, due, owner, note } = step;
+    const el = document.createElement("div");
+    el.className = "pipeline-step" + (i === 0 ? " active" : "");
+    el.innerHTML = `
+      <div class="pipeline-dot" aria-hidden="true"></div>
+      <div>
+        <div><b>${stage || "Stage"}</b></div>
+        <div class="pipeline-meta">
+          ${due ? `<span class="badge">${new Date(due).toLocaleDateString()}</span>` : ""}
+          ${owner ? `<span class="badge">${owner}</span>` : ""}
+        </div>
+        ${note ? `<div class="pipeline-note">${note}</div>` : ""}
+      </div>
+      <div><button class="btn-ghost" data-stage="${stage || ""}">Open</button></div>
+    `;
+    box.appendChild(el);
+  });
+  box.addEventListener("click", (e) => {
+    const st = e.target?.dataset?.stage;
+    if (!st) return;
+    // Simple routing: RFP -> Clients; Packs/Reports -> Reports page, etc.
+    if (/RFP/i.test(st)) { state.view = "clients"; render(); }
+    else { state.view = "report"; state.reportCode = "SLA-MONTHLY"; render(); }
+  });
+  return card;
+}
+
+async function buildPerformanceCard({ limit = 3 } = {}){
+  try {
+    const data = await api("/clients");
+    const rows = (data || [])
+      .map(c => ({
+        name: c.name,
+        perf: c.perfSpark || [],
+        ytd:  c.returns?.ytdPct ?? null
+      }))
+      .slice(0, limit);
+
+    const card = document.createElement("div");
+    card.className = "card perf-compact";
+    card.innerHTML = `
+      <div class="p">
+        <div class="flex-between">
+          <div class="section-title">Performance Snapshot</div>
+          <div class="perf-actions">
+            <button class="btn-ghost" id="perf-all">View all</button>
+          </div>
+        </div>
+        <table class="table">
+          <thead><tr><th>Client</th><th style="width:170px;">Last 12m</th><th style="width:90px;">YTD</th><th style="width:90px;"></th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${r.name}</td>
+                <td class="spark-cell">${sparkline(r.perf)}</td>
+                <td>${r.ytd != null ? fmtPct(r.ytd) : "-"}</td>
+                <td><button class="btn-ghost" data-name="${r.name}">Open</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="subtle sep"></div>
+        <small class="subtle">Compact view shows top ${limit}. Use "View all" for the full list.</small>
+      </div>
+    `;
+    const tb = card.querySelector("tbody");
+    tb.addEventListener("click", (e) => {
+      const name = e.target?.dataset?.name;
+      if (!name) return;
+      state.view = "report";
+      state.reportCode = "PERF-ACB";
+      render();
+    });
+    card.querySelector("#perf-all").onclick = () => {
+      state.view = "clients"; render();
+    };
+    return card;
+  } catch (e) {
+    console.error("Performance card error:", e);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<div class="p"><div class="section-title">Performance Snapshot</div><div class="subtle">Unable to load performance data</div></div>`;
+    return card;
+  }
+}
+
+function buildRiskOverviewCompact(risk){
+  const card = document.createElement("div");
+  card.className = "card";
+  const te = Number(risk?.trackingErrorBps ?? 0);
+  const tePct = Math.min(1, Math.abs(te) / 400);
+  const var1 = Number(risk?.var95_oneDayPct ?? 0);
+  const var10 = Number(risk?.var95_tenDayPct ?? 0);
+  const beta = Number(risk?.beta ?? 1);
+  const ir = Number(risk?.infoRatio ?? 0);
+  const act = Number(risk?.activeSharePct ?? 0);
+
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Risk Overview</div>
+      <div class="risk-compact">
+        <div class="risk-stat">
+          <div class="risk-label">Tracking Error</div>
+          <div class="risk-value">${fmtBps(te)}</div>
+          <div class="risk-mini">Budget: 0–250 bps</div>
+          <div class="risk-bar" style="margin-top:8px;"><span style="right:${(100 - tePct*100).toFixed(1)}%"></span></div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">VaR (95%)</div>
+          <div class="risk-value">${var1.toFixed(1)}% (1-day)</div>
+          <div class="risk-mini">${var10.toFixed(1)}% (10-day)</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Beta</div>
+          <div class="risk-value">${beta.toFixed(2)}</div>
+          <div class="risk-mini">Info Ratio ${ir.toFixed(2)}</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Active Share</div>
+          <div class="risk-value">${act.toFixed(0)}%</div>
+          <div class="risk-mini">vs benchmark</div>
+        </div>
+      </div>
+
+      <details class="risk-collapsible">
+        <summary class="subtle">Factor Exposures (compact)</summary>
+        <div style="margin-top:8px;">
+          <table class="table">
+            <thead><tr><th>Factor</th><th style="width:80px;">Exposure</th></tr></thead>
+            <tbody>
+              ${(risk?.factors || []).slice(0,8).map(f => `
+                <tr>
+                  <td>${f.factor}</td>
+                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#b91c1c'}">${f.exposure.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  `;
+  return card;
 }
 
 // New Mandates Views
