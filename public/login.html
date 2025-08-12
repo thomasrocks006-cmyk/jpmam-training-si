@@ -1,0 +1,113 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Sign in — JPMAM Training</title>
+    <link rel="stylesheet" href="/reset.css" />
+    <link rel="stylesheet" href="/auth.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body class="auth-body">
+    <main class="auth-wrap">
+      <section class="auth-card" role="form" aria-labelledby="auth-title">
+        <header class="auth-header">
+          <img src="/logo.svg" alt="JPMAM" class="auth-logo" />
+          <h1 id="auth-title" class="auth-title">Sign in</h1>
+          <p class="auth-subtitle">Use your work credentials to continue</p>
+        </header>
+
+        <form id="loginForm" class="auth-form">
+          <div class="field">
+            <label for="email" class="label">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              required
+              class="input"
+              placeholder="you@company.com"
+            />
+          </div>
+
+          <div class="field">
+            <label for="password" class="label">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="input"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary">Sign in</button>
+
+          <!-- This bar keeps 'Forgot password?' and 'Need help?' aligned nicely -->
+          <div class="auth-links" aria-label="Assistance links">
+            <a class="link" href="/forgot.html">Forgot password?</a>
+            <span class="spacer"></span>
+            <a class="link" href="mailto:it-support@yourcompany.com">Need help?</a>
+          </div>
+
+          <p id="authMsg" role="alert" class="auth-msg" hidden></p>
+        </form>
+      </section>
+
+      <footer class="auth-footnote">
+        <p>Authorized access only. Activity may be monitored.</p>
+      </footer>
+    </main>
+
+    <script>
+      (function () {
+        const form = document.getElementById("loginForm");
+        const msg = document.getElementById("authMsg");
+
+        function showMsg(text, type = "error") {
+          msg.textContent = text;
+          msg.className = "auth-msg " + (type === "ok" ? "ok" : "error");
+          msg.hidden = false;
+        }
+
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          msg.hidden = true;
+
+          const payload = {
+            email: form.email.value.trim(),
+            password: form.password.value,
+          };
+
+          // basic front-end validation
+          if (!payload.email || !payload.password) {
+            showMsg("Please enter your email and password.");
+            return;
+          }
+
+          try {
+            const res = await window.api.post("/auth/login", payload);
+            if (res?.token) {
+              window.api.setToken(res.token);
+              showMsg("Signed in. Redirecting…", "ok");
+              // go to dashboard (adjust if your app uses a different path)
+              setTimeout(() => (location.href = "/"), 400);
+            } else {
+              showMsg("Unexpected response from server.");
+            }
+          } catch (err) {
+            showMsg(err.message || "Sign-in failed.");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
