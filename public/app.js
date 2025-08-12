@@ -38,6 +38,21 @@ async function adminSetFlags(partial){
 }
 async function adminGetAudit(){ return await api("/admin/audit"); }
 
+// === Profile & Settings API ===
+async function meGet(){ return await api("/users/me"); }
+async function meUpdate(payload){
+  return await api("/users/me", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+}
+async function meSetPassword(current, next){
+  return await api("/users/me/password", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ current, next }) });
+}
+async function meSetPrefs(prefs){
+  return await api("/users/me/preferences", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(prefs) });
+}
+async function meUploadPhoto(dataUrl){
+  return await api("/users/me/photo", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dataUrl }) });
+}
+
 // === RFPs API ===
 async function rfpList(params = {}){
   const qs = new URLSearchParams(params).toString();
@@ -491,6 +506,14 @@ function sidebar() {
   rfpsLink.onclick = () => { state.view = "rfps"; render(); };
   p.appendChild(rfpsLink);
 
+  // Profile link
+  const profileLink = document.createElement("div");
+  profileLink.className = "navlink";
+  profileLink.style.marginTop = "8px";
+  profileLink.innerHTML = `<span>👤</span> Profile & Settings`;
+  profileLink.onclick = () => { state.view = "profile"; render(); };
+  p.appendChild(profileLink);
+
   // Portfolio Risk link
   const riskLink = document.createElement("div");
   riskLink.className = "navlink";
@@ -757,9 +780,38 @@ function DashboardMain() {
 
 
 
+  // === Dashboard SSE (with fallback) ===
+  let dashES = null;
+  function connectDashStream({ onEvent }){
+    try {
+      if (dashES) dashES.close();
+      dashES = new EventSource("/api/dashboard/stream");
+      dashES.addEventListener("dash", (e) => {
+        try { const evt = JSON.parse(e.data); onEvent?.(evt); } catch {}
+      });
+      dashES.addEventListener("ping", () => {/* keepalive */});
+      dashES.onerror = () => { /* fallback reconnect after delay */ setTimeout(()=>connectDashStream({ onEvent }), 5000); };
+    } catch {
+      // no SSE support: ignore; UI will rely on polling/refresh buttons
+    }
+  }
+
   // === Enhanced Dashboard Layout ===
   (async () => {
     try {
+      // Check user's live updates preference
+      const me = await fetchMe();
+      const allowLive = me?.preferences?.liveUpdates !== false; // default ON
+      if (allowLive) {
+        connectDashStream({ 
+          onEvent: (evt) => {
+            // Refresh the dashboard when events occur
+            console.log("Dashboard event:", evt);
+            render();
+          }
+        });
+      }
+
       // Use the new compact builders
       const perfCard = await buildPerformanceCard({ limit: 3 });
       const riskCard = buildRiskOverviewCompact({
@@ -917,60 +969,248 @@ function ViewReportDetail() {
   return root;
 }
 
-function ViewProfile() {
+function ViewProfile(){
   const root = document.createElement("div");
   root.className = "container";
   root.appendChild(topNav());
 
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
   const main = document.createElement("div");
-  main.className = "card";
-  main.innerHTML = `
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
     <div class="p">
-      <h2>Profile & Settings</h2>
-      <div id="body"><small class="muted">Loading…</small></div>
-      <div style="height:16px;"></div>
-      <h3>Preferences</h3>
-      <div class="row">
-        <label><input type="checkbox" checked> Email notifications</label>
-        <label><input type="checkbox" checked> Desktop notifications</label>
-        <label><input type="checkbox"> Dark theme (mock)</label>
+      <div class="flex-between">
+        <h2>Profile & Settings</h2>
+        <small class="muted">Manage your profile, password, and preferences</small>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top:10px;">
+        <div class="card">
+          <div class="p">
+            <div class="section-title">Profile</div>
+            <div class="grid" style="grid-template-columns: 110px 1fr; gap: 12px;">
+              <div>
+                <img id="avatar" src="" alt="avatar" style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" />
+                <div style="height:8px;"></div>
+                <input type="file" id="photo" accept="image/png,image/jpeg"/>
+                <button class="btn-ghost" id="uploadPhoto" style="margin-top:6px;">Upload</button>
+              </div>
+              <div>
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <label class="muted small">Name</label>
+                    <input id="name" class="input" placeholder="Your name"/>
+                  </div>
+                  <div>
+                    <label class="muted small">Phone</label>
+                    <input id="phone" class="input" placeholder="+61 ..."/>
+                  </div>
+                </div>
+                <div style="height:8px;"></div>
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <label class="muted small">Email</label>
+                    <input id="email" class="input" disabled/>
+                  </div>
+                  <div>
+                    <label class="muted small">Role</label>
+                    <input id="role" class="input" disabled/>
+                  </div>
+                </div>
+                <div style="height:8px;"></div>
+                <button class="btn" id="saveProfile">Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="p">
+            <div class="section-title">Change Password</div>
+            <div>
+              <label class="muted small">Current Password</label>
+              <input id="pwCur" class="input" type="password" placeholder="Current password"/>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top:8px;">
+              <div>
+                <label class="muted small">New Password</label>
+                <input id="pwNew" class="input" type="password" placeholder="At least 8 chars"/>
+              </div>
+              <div>
+                <label class="muted small">Confirm New Password</label>
+                <input id="pwConf" class="input" type="password" placeholder="Repeat new password"/>
+              </div>
+            </div>
+            <div style="height:8px;"></div>
+            <button class="btn" id="savePw">Update Password</button>
+            <small class="muted" style="display:block;margin-top:6px;">Tip: use 12+ chars, with a mix of letters, numbers, and symbols.</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="p">
+            <div class="section-title">Notifications & Preferences</div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="card" style="border:1px solid var(--line);">
+                <div class="p">
+                  <b>Email Alerts</b>
+                  <div class="sep" style="margin:8px 0;"></div>
+                  <label class="inline">
+                    <input type="checkbox" id="alrApprovals"/> Approvals assigned to me
+                  </label><br/>
+                  <label class="inline">
+                    <input type="checkbox" id="alrBreaches"/> Mandate breaches
+                  </label><br/>
+                  <label class="inline">
+                    <input type="checkbox" id="alrRfp"/> RFP stage changes
+                  </label>
+                </div>
+              </div>
+              <div class="card" style="border:1px solid var(--line);">
+                <div class="p">
+                  <b>Dashboard</b>
+                  <div class="sep" style="margin:8px 0;"></div>
+                  <label class="inline">
+                    <input type="checkbox" id="liveUpdates"/> Live updates (SSE)
+                  </label>
+                  <div class="muted small" style="margin-top:6px;">Uncheck if you prefer manual refresh or have spotty connectivity.</div>
+                </div>
+              </div>
+            </div>
+            <div style="height:8px;"></div>
+            <button class="btn" id="savePrefs">Save Preferences</button>
+          </div>
+        </div>
+
+        <div class="card" id="adminOnly" style="display:none;">
+          <div class="p">
+            <div class="section-title">Admin Shortcuts</div>
+            <div class="inline">
+              <button class="btn-ghost" id="goAdmin">Open Admin</button>
+              <button class="btn-ghost" id="goUsers">User Management</button>
+            </div>
+            <small class="muted" style="display:block;margin-top:6px;">Visible only to Admins.</small>
+          </div>
+        </div>
       </div>
     </div>
   `;
-  root.appendChild(main);
+  main.appendChild(card);
 
-  (async()=>{
-    try{
-      const me = await api("/auth/me");
-      const body = main.querySelector("#body");
-      body.innerHTML = `
-        <div class="grid" style="grid-template-columns: repeat(3,minmax(0,1fr));">
-          <div>
-            <small class="muted">Name</small><div><strong>${me.name}</strong></div>
-            <small class="muted">DOB</small><div>${me.dob}</div>
-            <small class="muted">Sex</small><div>${me.sex}</div>
-          </div>
-          <div>
-            <small class="muted">Role</small><div>${me.role}</div>
-            <small class="muted">Department</small><div>${me.department}</div>
-            <small class="muted">Employee ID</small><div>${me.employeeId}</div>
-          </div>
-          <div>
-            <small class="muted">Manager</small><div>${me.manager}</div>
-            <small class="muted">Office</small><div>${me.office}</div>
-            <small class="muted">Phone</small><div>${me.phone}</div>
-          </div>
-        </div>
-        <div style="height:12px;"></div>
-        <h3>Security</h3>
-        <ul>
-          <li>MFA Devices: ${me.mfaDevices.join(", ")}</li>
-          <li>Last login: ${new Date().toLocaleString()}</li>
-        </ul>
-      `;
-    } catch(e){
-      main.querySelector("#body").innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+  // state for current user
+  let user = null;
+
+  (async function init(){
+    try {
+      user = await meGet();
+    } catch {
+      user = await fetchMe(); // fallback to /auth/me minimal
     }
+    const avatar = card.querySelector("#avatar");
+    avatar.src = user?.photo || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24'%3E%3Cpath fill='%23ccc' d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+
+    card.querySelector("#name").value = user?.name || "";
+    card.querySelector("#phone").value = user?.phone || "";
+    card.querySelector("#email").value = user?.email || "";
+    card.querySelector("#role").value = user?.role || "";
+
+    const prefs = user?.preferences || {};
+    const e = (prefs.emailAlerts || {});
+    card.querySelector("#alrApprovals").checked = !!e.approvals;
+    card.querySelector("#alrBreaches").checked  = !!e.breaches;
+    card.querySelector("#alrRfp").checked       = !!e.rfpStages;
+    // default live updates ON if unset
+    card.querySelector("#liveUpdates").checked  = (prefs.liveUpdates !== false);
+
+    if ((user?.role || "") === "Admin") {
+      card.querySelector("#adminOnly").style.display = "";
+      card.querySelector("#goAdmin").onclick = () => { state.view = "admin"; render(); };
+      card.querySelector("#goUsers").onclick = () => { state.view = "admin"; render(); /* Users tab default there */ };
+    }
+
+    // Save profile
+    card.querySelector("#saveProfile").onclick = async () => {
+      const payload = {
+        name: card.querySelector("#name").value.trim(),
+        phone: card.querySelector("#phone").value.trim(),
+      };
+      try {
+        const res = await meUpdate(payload);
+        CURRENT_USER = res; // refresh local cache
+        toast("Profile saved");
+      } catch (err){
+        alert(err.message || "Failed to save profile");
+      }
+    };
+
+    // Upload photo
+    card.querySelector("#uploadPhoto").onclick = async () => {
+      const file = card.querySelector("#photo").files?.[0];
+      if (!file) return alert("Choose an image first");
+      const okTypes = ["image/png","image/jpeg"];
+      if (!okTypes.includes(file.type)) return alert("Use PNG or JPEG");
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      try {
+        const r = await meUploadPhoto(String(dataUrl));
+        card.querySelector("#avatar").src = r.photo;
+        await meUpdate({ photo: r.photo });
+        CURRENT_USER = await meGet();
+        toast("Photo updated");
+      } catch (err) {
+        alert(err.message || "Upload failed");
+      }
+    };
+
+    // Save password
+    card.querySelector("#savePw").onclick = async () => {
+      const cur = card.querySelector("#pwCur").value;
+      const n1  = card.querySelector("#pwNew").value;
+      const n2  = card.querySelector("#pwConf").value;
+      if (n1 !== n2) return alert("New passwords do not match");
+      if ((n1 || "").length < 8) return alert("New password must be at least 8 characters");
+      try {
+        await meSetPassword(cur, n1);
+        card.querySelector("#pwCur").value = "";
+        card.querySelector("#pwNew").value = "";
+        card.querySelector("#pwConf").value = "";
+        toast("Password updated");
+      } catch (err) {
+        alert(err.message || "Failed to update password");
+      }
+    };
+
+    // Save preferences
+    card.querySelector("#savePrefs").onclick = async () => {
+      const prefs = {
+        emailAlerts: {
+          approvals: card.querySelector("#alrApprovals").checked,
+          breaches:  card.querySelector("#alrBreaches").checked,
+          rfpStages: card.querySelector("#alrRfp").checked
+        },
+        liveUpdates: card.querySelector("#liveUpdates").checked
+      };
+      try {
+        await meSetPrefs(prefs);
+        CURRENT_USER = await meGet();
+        toast("Preferences saved");
+      } catch (err) {
+        alert(err.message || "Failed to save preferences");
+      }
+    };
   })();
 
   return root;

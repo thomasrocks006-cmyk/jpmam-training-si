@@ -15,6 +15,7 @@ import dashboardRoutes from "./routes/dashboard.js";
 import marketRoutes from "./routes/market.js";
 import adminRoutes from "./routes/admin.js";
 import rfpsRoutes from "./routes/rfps.js";
+import usersRoutes from "./routes/users.js";
 
 dotenv.config();
 
@@ -54,6 +55,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/market", marketRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/rfps", rfpsRoutes);
+app.use("/api/users", usersRoutes);
 
 // 3. Always serve index.html for unknown frontend routes (SPA fallback)
 app.get("*", (req, res, next) => {
