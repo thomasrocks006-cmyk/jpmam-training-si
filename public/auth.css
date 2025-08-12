@@ -99,18 +99,21 @@
 .auth-links {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   margin-top: 6px;
-  font-size: 14px;
+  font-size: 13px;
+  min-height: 20px;
 }
 
 .auth-links .spacer {
-  flex: 1 1 auto; /* pushes Need help? to the right on wide screens */
+  display: none; /* Remove spacer, use justify-space-between instead */
 }
 
 .link {
   color: #0b6fc2;
   text-decoration: none;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .link:hover {
@@ -145,20 +148,39 @@
   margin-top: 14px;
 }
 
+/* Checkbox styling */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #2a3d50;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.checkbox-text {
+  user-select: none;
+}
+
 /* Responsive tweaks */
 @media (max-width: 460px) {
   .auth-card {
     padding: 22px;
   }
   .auth-links {
+    flex-direction: column;
     gap: 8px;
-    flex-wrap: wrap;
-  }
-  .auth-links .spacer {
-    display: none; /* stack links on small screens */
+    align-items: stretch;
   }
   .auth-links .link {
-    width: 100%;
     text-align: center;
+    font-size: 13px;
   }
 }
