@@ -1,0 +1,126 @@
+// === Dashboard: new helpers ===
+async function fetchDashboardAlerts(){
+  const r = await apiGet("/dashboard/alerts");
+  return r.alerts || [];
+}
+async function fetchDashboardDeadlines(){
+  const r = await apiGet("/dashboard/deadlines");
+  return r.items || [];
+}
+
+// Tiny sparkline (inline SVG) for performance arrays like [ -12, -8, ... ]
+function sparkline(values, { width=140, height=36 } = {}){
+  if (!values || !values.length) return "";
+  const min = Math.min(...values), max = Math.max(...values);
+  const norm = v => {
+    if (max === min) return height/2;
+    const t = (v - min) / (max - min);
+    return height - t * height;
+  };
+  const step = width / (values.length - 1);
+  const points = values.map((v,i)=> `${(i*step).toFixed(2)},${norm(v).toFixed(2)}`).join(" ");
+  return `
+    <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true">
+      <polyline fill="none" stroke="currentColor" stroke-width="2" points="${points}" />
+    </svg>`;
+}
+
+// Alerts card
+function buildAlertsCard(alerts){
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between"><h3>Key Risk & Compliance Alerts</h3></div>
+      <div class="alerts-list"></div>
+    </div>`;
+  const list = card.querySelector(".alerts-list");
+  list.innerHTML = alerts.length ? alerts.map(a => `
+    <div class="alert-row">
+      <div class="alert-main">
+        <span class="badge ${a.severity.toLowerCase()}">${a.severity}</span>
+        <b>${a.client}</b> — ${a.type}
+        <span class="muted">(${a.daysOpen} days open)</span>
+      </div>
+      <div class="muted small">${a.note}</div>
+      <div><button class="btn-ghost" data-id="${a.mandateId}">Open Mandate</button></div>
+    </div>
+  `).join("") : `<div class="muted">✅ All mandates in compliance</div>`;
+  list.addEventListener("click", (e) => {
+    const id = e.target?.dataset?.id;
+    if (!id) return;
+    state.view = "mandate";
+    state.mandateId = id;
+    render();
+  });
+  return card;
+}
+
+// Deadlines card
+function buildDeadlinesCard(items){
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between"><h3>Upcoming Deadlines & Deliverables</h3></div>
+      <table class="table">
+        <thead><tr><th style="width: 100px;">Due</th><th>Deliverable</th><th>Client</th><th>Owner</th><th style="width:110px;"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>`;
+  const tb = card.querySelector("tbody");
+  tb.innerHTML = items.map(x => `
+    <tr>
+      <td>${x.due}</td>
+      <td>${x.title}</td>
+      <td>${x.client}</td>
+      <td>${x.owner}</td>
+      <td><button class="btn-ghost" data-ref="${x.ref}">Open</button></td>
+    </tr>
+  `).join("");
+  tb.addEventListener("click", (e) => {
+    const ref = e.target?.dataset?.ref || "";
+    if (ref.startsWith("RFP-")) { state.view = "clients"; render(); }
+    else if (ref.startsWith("RISK-")) { state.view = "portfolio-risk"; render(); }
+    else if (ref.startsWith("COMP-")) { state.view = "report"; state.reportCode = "COMP-QTR"; render(); }
+    else { state.view = "clients"; render(); }
+  });
+  return card;
+}
+
+// Performance snapshot card (uses clients' perfSpark/YTD if available)
+async function buildPerformanceCard(){
+  // re-use existing clients endpoint
+  const data = await apiGet("/clients");
+  const rows = (data?.clients || []).map(c => {
+    const perf = c.perfSpark || [];
+    const svg = sparkline(perf);
+    const ytd = (c.returns?.ytdPct ?? null);
+    return `
+      <tr>
+        <td>${c.name}</td>
+        <td class="spark-cell">${svg}</td>
+        <td>${ytd != null ? fmtPct(ytd) : "-"}</td>
+        <td><button class="btn-ghost" data-name="${c.name}">Open Performance</button></td>
+      </tr>`;
+  }).join("");
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between"><h3>Performance Snapshot</h3></div>
+      <table class="table">
+        <thead><tr><th>Client</th><th style="width:160px;">Last 12m</th><th style="width:90px;">YTD</th><th style="width:120px;"></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  card.querySelector("tbody").addEventListener("click", (e) => {
+    const name = e.target?.dataset?.name;
+    if (!name) return;
+    state.view = "report";
+    state.reportCode = "PERF-ACB"; // example report route; adjust if you prefer
+    render();
+  });
+  return card;
+}
