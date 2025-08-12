@@ -1,0 +1,63 @@
+3c) Wire a “Save Mandate” button (create/update)
+If your Mandates page has a small form/modal to add/edit, wire it like this. For example:
+
+js
+Copy code
+// Example: small inline "New Mandate" handler
+document.getElementById("newMandateBtn").onclick = async () => {
+  const id = prompt("Mandate ID (e.g., M-AUS-EQ-SS-002):");
+  const client = id ? prompt("Client:") : null;
+  const strategy = client ? prompt("Strategy:") : null;
+  if (!id || !client || !strategy) return;
+  try {
+    await mandateCreate({ id, client, strategy, status: "Active", aumAud: 0 });
+    const data = await mandatesList();
+    tableBody.innerHTML = renderMandatesTable(data);
+    toast("Mandate created");
+  } catch (e) { alert(e.message || "Failed to create mandate"); }
+};
+
+// Example: in Mandate Detail "Save Mandate" button
+document.getElementById("saveMandate").onclick = async () => {
+  // Gather values from your detail form fields:
+  const id = state.mandateId;
+  const aum = Number(document.getElementById("fldAumAud").value || 0);
+  const status = document.getElementById("fldStatus").value || "Active";
+  const benchmark = document.getElementById("fldBenchmark").value || null;
+
+  try {
+    await mandateUpdate(id, { aumAud: aum, status, benchmark });
+    toast("Saved");
+  } catch (e) { alert(e.message || "Failed to save"); }
+};
+If you don’t have those inputs yet, you can add simple fields:
+#fldAumAud (number), #fldStatus (select), #fldBenchmark (text).
+
+3d) Use the new “fetch-only breaches” in your Breaches tab
+Earlier we added a Breaches tab. Replace the fetch in that tab with:
+
+js
+Copy code
+// in renderTab("breaches"):
+const { breaches } = await mandateBreaches(state.mandateId);
+body.innerHTML = "";
+body.appendChild(buildBreachesPanel({ breaches }));
+…and tweak buildBreachesPanel() to accept { breaches } as input or adapt accordingly.
+
+You can also add quick actions:
+
+js
+Copy code
+// add buttons like <button class="btn-ghost" data-ack="BR-SS-001">Acknowledge</button>
+body.addEventListener("click", async (e) => {
+  const id = e.target?.dataset?.ack || e.target?.dataset?.resolve;
+  if (!id) return;
+  try {
+    const status = e.target.dataset.ack ? "Acknowledged" : "Resolved";
+    await mandatePatchBreach(state.mandateId, id, { status });
+    toast(`Breach ${status}`);
+    const { breaches } = await mandateBreaches(state.mandateId);
+    body.innerHTML = "";
+    body.appendChild(buildBreachesPanel({ breaches }));
+  } catch (err) { alert(err.message || "Update failed"); }
+});

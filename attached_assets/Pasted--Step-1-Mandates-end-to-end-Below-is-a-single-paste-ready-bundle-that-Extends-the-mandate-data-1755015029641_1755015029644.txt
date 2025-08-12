@@ -1,0 +1,204 @@
+ Step 1 (Mandates) end-to-end. Below is a single, paste-ready bundle that:
+
+Extends the mandate data model (adds aumAud, status, lastUpdate)
+
+Adds CRUD endpoints + breach PATCH + “fetch-only breaches”
+
+Wires frontend helpers and a safe, decluttered table renderer
+
+Hooks a Save Mandate button (create/update)
+
+If anything doesn’t match your file exactly, use the clear anchors and replace blocks as indicated.
+
+1) Shared store (data model + helpers)
+Replace lib/mandatesStore.js with this:
+js
+Copy code
+// lib/mandatesStore.js
+// In-memory demo store for mandates + breaches.
+// NOTE: This resets on server restart. (We can persist later via data/mandates.json.)
+
+function nowIso() { return new Date().toISOString(); }
+
+let MANDATES = [
+  {
+    id: "M-AUS-EQ-SS-001",
+    client: "SunSuper",
+    strategy: "Australian Equity Core",
+    benchmark: "S&P/ASX 200 (TR)",
+    aumAud: 4200000000,         // NEW
+    status: "Active",           // NEW: Active | On Hold | Closed
+    lastUpdate: nowIso(),       // NEW
+    bands: { trackingErrorBps: [0, 250] },
+    kpis: { ytdReturnPct: 4.7, trackingErrorBps: 310 },
+    breaches: [
+      {
+        id: "BR-SS-001",
+        type: "Tracking Error",
+        severity: "Critical",
+        status: "Open",         // Open | Resolved | Acknowledged
+        opened: new Date(Date.now() - 2*24*60*60*1000).toISOString(),
+        note: "TE exceeded +200 bps band vs benchmark."
+      }
+    ],
+    pipeline: [
+      { stage: "RFP Draft", due: "2025-08-14", owner: "You", note: "Drafting fee schedule updates." }
+    ]
+  },
+  {
+    id: "M-AU-BOND-QBE-001",
+    client: "QBE Insurance",
+    strategy: "AU Core Bond",
+    benchmark: "Bloomberg AusBond Composite",
+    aumAud: 2850000000,         // NEW
+    status: "Active",           // NEW
+    lastUpdate: nowIso(),       // NEW
+    bands: { issuerConcentrationPct: 8 },
+    kpis: { ytdReturnPct: 2.3 },
+    breaches: [
+      {
+        id: "BR-QBE-002",
+        type: "Concentration",
+        severity: "Medium",
+        status: "Open",
+        opened: new Date(Date.now() - 6*24*60*60*1000).toISOString(),
+        note: "Single issuer exposure reached alert level."
+      },
+      {
+        id: "BR-QBE-001",
+        type: "Liquidity",
+        severity: "Low",
+        status: "Resolved",
+        opened: new Date(Date.now() - 18*24*60*60*1000).toISOString(),
+        resolved: new Date(Date.now() - 15*24*60*60*1000).toISOString(),
+        note: "Small off-benchmark line hit liquidity tripwire."
+      }
+    ],
+    pipeline: [
+      { stage: "Legal Review", due: "2025-08-12", owner: "Coverage" }
+    ]
+  }
+];
+
+// ---- READ
+export function getMandates() {
+  // return a lightweight list shape commonly used by UI
+  return MANDATES.map(m => ({
+    id: m.id,
+    client: m.client,
+    strategy: m.strategy,
+    aumAud: m.aumAud ?? null,
+    status: m.status ?? "Active",
+    lastUpdate: m.lastUpdate ?? null
+  }));
+}
+
+export function findMandateById(id) {
+  return MANDATES.find(m => m.id === id) || null;
+}
+
+// ---- CREATE / UPDATE / DELETE
+export function createMandate(payload) {
+  if (!payload?.id || !payload?.client || !payload?.strategy) {
+    throw new Error("Missing id, client or strategy");
+  }
+  if (findMandateById(payload.id)) {
+    throw new Error("Mandate id already exists");
+  }
+  const m = {
+    id: payload.id,
+    client: payload.client,
+    strategy: payload.strategy,
+    benchmark: payload.benchmark || null,
+    aumAud: Number(payload.aumAud ?? 0),
+    status: payload.status || "Active",
+    lastUpdate: nowIso(),
+    bands: payload.bands || {},
+    kpis: payload.kpis || {},
+    breaches: payload.breaches || [],
+    pipeline: payload.pipeline || []
+  };
+  MANDATES.unshift(m);
+  return m;
+}
+
+export function updateMandate(id, patch) {
+  const idx = MANDATES.findIndex(m => m.id === id);
+  if (idx === -1) throw new Error("Mandate not found");
+  MANDATES[idx] = {
+    ...MANDATES[idx],
+    ...patch,
+    aumAud: patch?.aumAud != null ? Number(patch.aumAud) : MANDATES[idx].aumAud,
+    lastUpdate: nowIso()
+  };
+  return MANDATES[idx];
+}
+
+export function deleteMandate(id) {
+  const idx = MANDATES.findIndex(m => m.id === id);
+  if (idx === -1) return false;
+  MANDATES.splice(idx, 1);
+  return true;
+}
+
+// ---- BREACH HELPERS
+export function getBreaches({ status } = {}) {
+  const flat = [];
+  for (const m of MANDATES) {
+    for (const b of (m.breaches || [])) {
+      if (status && b.status !== status) continue;
+      flat.push({
+        id: b.id,
+        mandateId: m.id,
+        client: m.client,
+        type: b.type,
+        severity: b.severity,
+        status: b.status,
+        opened: b.opened,
+        resolved: b.resolved || null,
+        note: b.note || ""
+      });
+    }
+  }
+  flat.sort((a,b) => new Date(b.opened) - new Date(a.opened));
+  return flat;
+}
+
+export function getBreachesForMandate(id) {
+  const m = findMandateById(id);
+  if (!m) throw new Error("Mandate not found");
+  return (m.breaches || []).slice().sort((a,b) => new Date(b.opened) - new Date(a.opened));
+}
+
+export function updateBreachStatus(mandateId, breachId, { status, note }) {
+  const m = findMandateById(mandateId);
+  if (!m) throw new Error("Mandate not found");
+  const idx = (m.breaches || []).findIndex(b => b.id === breachId);
+  if (idx === -1) throw new Error("Breach not found");
+  const b = m.breaches[idx];
+  const next = { ...b };
+  if (status) {
+    next.status = status;
+    if (status === "Resolved") next.resolved = nowIso();
+  }
+  if (note != null) next.note = String(note);
+  m.breaches[idx] = next;
+  m.lastUpdate = nowIso();
+  return next;
+}
+
+export function addBreach(mandateId, payload) {
+  const m = findMandateById(mandateId);
+  if (!m) throw new Error("Mandate not found");
+  const b = {
+    id: payload?.id || `BR-${mandateId.split("-").slice(-1)[0]}-${Date.now()}`,
+    type: payload?.type || "Policy",
+    severity: payload?.severity || "Low",
+    status: payload?.status || "Open",
+    opened: payload?.opened || nowIso(),
+    note: payload?.note || ""
+  };
+  m.breaches = [b, ...(m.breaches || [])];
+  m.lastUpdate = nowIso();
+  return b;
+}
