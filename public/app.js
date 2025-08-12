@@ -3,6 +3,19 @@
 
 const API = window.API_BASE;
 
+// Helper formatting functions
+function fmtAUD(n) {
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0 }).format(n);
+}
+
+function fmtPct(n) {
+  return `${Number(n).toFixed(2)}%`;
+}
+
+function fmtBps(n) {
+  return `${Number(n).toFixed(0)} bps`;
+}
+
 const state = {
   token: null,
   user: null,
@@ -294,7 +307,7 @@ function sidebar() {
   el.querySelector("#clientsLink").onclick = () => setState({ view: "clients" });
   el.querySelector("#mandatesLink").onclick = () => setState({ view: "mandates" });
   el.querySelector("#rfpsLink").onclick = () => alert("RFPs view is mocked.");
-  el.querySelector("#riskLink").onclick = () => alert("Portfolio Risk view is mocked.");
+  el.querySelector("#riskLink").onclick = () => setState({ view: "portfolio-risk" });
   el.querySelector("#adminLink").onclick = () => alert("Admin view is mocked.");
   return el;
 }
@@ -1133,6 +1146,332 @@ function ViewMandateDetail() {
   return root;
 }
 
+function ViewMandates() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const main = document.createElement("div");
+  main.className = "card";
+  main.innerHTML = `
+    <div class="p">
+      <h2>Mandates</h2>
+      <div style="height:10px;"></div>
+      <div id="list"><small class="muted">Loading…</small></div>
+    </div>
+  `;
+  root.appendChild(main);
+
+  const list = main.querySelector("#list");
+
+  (async () => {
+    try {
+      const mandates = await api("/mandates");
+      list.innerHTML = `
+        <table class="table">
+          <thead>
+            <tr><th>ID</th><th>Client</th><th>Strategy</th><th>AUM (AUD)</th><th>Inception</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${mandates.map(m => `
+              <tr>
+                <td><strong>${m.id}</strong></td>
+                <td>${m.client}</td>
+                <td>${m.strategy}</td>
+                <td>$${(m.aumAud / 1000000000).toFixed(1)}B</td>
+                <td>${new Date(m.inception).toLocaleDateString()}</td>
+                <td><button class="btn" onclick="viewMandate('${m.id}')">View</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      list.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    }
+  })();
+
+  return root;
+}
+
+function ViewMandateDetail() {
+  const mandateId = state.selectedMandate;
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const main = document.createElement("div");
+  main.className = "card";
+  main.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandate: ${mandateId}</h2>
+        <button id="back" class="btn">← All Mandates</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div id="content"><small class="muted">Loading…</small></div>
+    </div>
+  `;
+  root.appendChild(main);
+
+  main.querySelector("#back").onclick = () => setState({ view: "mandates" });
+
+  const content = main.querySelector("#content");
+
+  (async () => {
+    try {
+      const mandate = await api(`/mandates/${encodeURIComponent(mandateId)}`);
+      content.innerHTML = `
+        <div class="kv">
+          <div><strong>Client:</strong> ${mandate.client}</div>
+          <div><strong>Strategy:</strong> ${mandate.strategy}</div>
+          <div><strong>Objective:</strong> ${mandate.objective}</div>
+          <div><strong>Benchmark:</strong> ${mandate.benchmark}</div>
+          <div><strong>AUM:</strong> $${(mandate.aumAud / 1000000000).toFixed(1)}B AUD</div>
+          <div><strong>Fee:</strong> ${mandate.feeBps} bps</div>
+          <div><strong>Inception:</strong> ${new Date(mandate.inception).toLocaleDateString()}</div>
+        </div>
+        <div style="height:16px;"></div>
+        <h3>Guidelines</h3>
+        <ul>
+          ${mandate.guidelines.map(g => `<li>${g}</li>`).join("")}
+        </ul>
+        <div style="height:16px;"></div>
+        <h3>SLA Requirements</h3>
+        <table class="table">
+          <thead><tr><th>Name</th><th>Frequency</th><th>Next Due</th></tr></thead>
+          <tbody>
+            ${mandate.sla.map(s => `
+              <tr>
+                <td>${s.name}</td>
+                <td>${s.freq}</td>
+                <td>${new Date(s.nextDue).toLocaleDateString()}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        ${mandate.breaches.length > 0 ? `
+          <div style="height:16px;"></div>
+          <h3>Recent Breaches</h3>
+          <table class="table">
+            <thead><tr><th>Date</th><th>Type</th><th>Details</th><th>Status</th></tr></thead>
+            <tbody>
+              ${mandate.breaches.map(b => `
+                <tr>
+                  <td>${new Date(b.date).toLocaleDateString()}</td>
+                  <td>${b.type}</td>
+                  <td><small class="muted">${b.details}</small></td>
+                  <td>${b.resolved ? "✓ Resolved" : "⚠ Open"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        ` : ""}
+      `;
+    } catch (e) {
+      content.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    }
+  })();
+
+  return root;
+}
+
+// Global function for mandate links
+window.viewMandate = (id) => setState({ view: "mandate", selectedMandate: id });
+
+function ViewPortfolioRisk() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const main = document.createElement("div");
+  main.className = "grid";
+  main.style.gridTemplateColumns = "2fr 1fr";
+  main.style.gap = "16px";
+
+  // Main content card
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div id="content"><small class="muted">Loading Portfolio Risk data…</small></div>
+    </div>
+  `;
+
+  // Sidebar card
+  const sidebar = document.createElement("div");
+  sidebar.className = "card";
+  sidebar.innerHTML = `
+    <div class="p">
+      <div id="sidebar"><small class="muted">Loading…</small></div>
+    </div>
+  `;
+
+  main.appendChild(card);
+  main.appendChild(sidebar);
+  root.appendChild(main);
+
+  const content = card.querySelector("#content");
+  const sidebarContent = sidebar.querySelector("#sidebar");
+
+  // Helper function to create progress bars
+  function createBar(value, max = 5, color = "#0ea5e9") {
+    const width = Math.min(100, Math.abs(value) / max * 100);
+    const bg = value >= 0 ? color : "#ef4444";
+    return `
+      <div style="background: #374151; border: 1px solid #4b5563; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; margin-top: 2px;">
+        <div style="width: ${width}%; height: 100%; background: ${bg};"></div>
+      </div>
+    `;
+  }
+
+  (async () => {
+    try {
+      const data = await api("/reports/RISK-PORTFOLIO");
+      const m = data.metrics || {};
+      const sectors = data.sectorExposures || [];
+      const factors = data.factorExposures || [];
+      const contrib = data.topContributorsBps || [];
+      const scenarios = data.scenarios || [];
+
+      content.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+          <div>
+            <h2 style="margin: 0;">Portfolio Risk — ${data.portfolio?.name}</h2>
+            <small class="muted">Benchmark: ${data.portfolio?.benchmark}</small>
+          </div>
+          <small class="muted">As of: ${new Date(data.asOf).toLocaleString()}</small>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">Tracking Error</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.trackingErrorPct)}</div>
+          </div>
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">Beta</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${m.beta?.toFixed(2)}</div>
+          </div>
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">VaR 95% (1d)</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.var95_oneDayPct)}</div>
+          </div>
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">Active Share</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.activeSharePct)}</div>
+          </div>
+        </div>
+
+        <!-- Sector & Factor Tables -->
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Sector exposures</h3>
+              <table class="table">
+                <thead>
+                  <tr><th>Sector</th><th>Port</th><th>Bench</th><th>Active</th><th style="width: 60px;"></th></tr>
+                </thead>
+                <tbody>
+                  ${sectors.map(s => `
+                    <tr>
+                      <td>${s.sector}</td>
+                      <td>${fmtPct(s.portWtPct)}</td>
+                      <td>${fmtPct(s.benchWtPct)}</td>
+                      <td style="color: ${s.activePct >= 0 ? '#10b981' : '#ef4444'}">${fmtPct(s.activePct)}</td>
+                      <td>${createBar(s.activePct, 5)}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Factor exposures</h3>
+              <table class="table">
+                <thead>
+                  <tr><th>Factor</th><th>Exposure</th><th style="width: 60px;"></th></tr>
+                </thead>
+                <tbody>
+                  ${factors.map(f => `
+                    <tr>
+                      <td>${f.factor}</td>
+                      <td style="color: ${f.exposure >= 0 ? '#10b981' : '#ef4444'}">${f.exposure.toFixed(2)}</td>
+                      <td>${createBar(f.exposure, 0.5, "#8b5cf6")}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contributors & Scenarios -->
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Top contributors (bps)</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                ${contrib.map(c => `
+                  <li style="margin-bottom: 6px; color: ${c.contribBps >= 0 ? '#e5e7eb' : '#ef4444'};">
+                    ${c.name} — <strong>${fmtBps(c.contribBps)}</strong>
+                  </li>
+                `).join("")}
+              </ul>
+            </div>
+          </div>
+          
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Scenarios</h3>
+              <table class="table">
+                <thead>
+                  <tr><th>Scenario</th><th>Shock</th><th>PnL (bps)</th></tr>
+                </thead>
+                <tbody>
+                  ${scenarios.map(s => `
+                    <tr>
+                      <td>${s.name}</td>
+                      <td><small class="muted">${s.shock}</small></td>
+                      <td style="color: ${s.pnlBps >= 0 ? '#10b981' : '#ef4444'}">${fmtBps(s.pnlBps)}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" onclick="alert('Download CSV - Mock functionality')">Download CSV</button>
+          <button class="btn" onclick="alert('Export PDF - Mock functionality')">Export PDF</button>
+        </div>
+      `;
+
+      sidebarContent.innerHTML = `
+        <h3 style="margin: 0 0 12px 0;">Portfolio Info</h3>
+        <div class="kv">
+          <div><strong>AUM:</strong> ${fmtAUD(data.portfolio?.aumAud || 0)}</div>
+          <div><strong>Name:</strong> ${data.portfolio?.name}</div>
+          <div><strong>Benchmark:</strong> ${data.portfolio?.benchmark}</div>
+        </div>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #374151;">
+          <small class="muted">All figures are mock and for training purposes only.</small>
+        </div>
+      `;
+
+    } catch (e) {
+      content.innerHTML = `<div style="color: #ef4444;">Error loading Portfolio Risk data: ${e.message}</div>`;
+      sidebarContent.innerHTML = `<div style="color: #ef4444;">Error</div>`;
+    }
+  })();
+
+  return root;
+}
+
 // ---------- Root render ----------
 function render() {
   const app = document.getElementById("app");
@@ -1145,7 +1484,9 @@ function render() {
   else if (state.view === "client") view = ViewClientDetail();
   else if (state.view === "report") view = ViewReportDetail();
   else if (state.view === "profile") view = ViewProfile();
-  else if (state.view === "mandates") view = ViewMandates(); // New view
+  else if (state.view === "mandates") view = ViewMandates();
+  else if (state.view === "mandate") view = ViewMandateDetail();
+  else if (state.view === "portfolio-risk") view = ViewPortfolioRisk(); // New view
   else if (state.view === "mandate") view = ViewMandateDetail(); // New view
   app.appendChild(view);
 }

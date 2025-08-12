@@ -28,95 +28,45 @@ const DB = {
       ],
       sla: [
         { id: "SLA-SS-01", name: "Monthly SLA report", freq: "Monthly", nextDue: "2025-08-15" },
-        { id: "SLA-SS-02", name: "Quarterly review pack", freq: "Quarterly", nextDue: "2025-10-15" }
-      ],
-      breaches: [
-        // { id, when, type, detail, status, approvalId? }
-      ]
-    },
-    {
-      id: "M-AUS-LDI-QBE-001",
-      client: "QBE Insurance",
-      strategy: "LDI / Liability-Aware Fixed Income",
-      objective: "Minimise surplus volatility vs. liability curve while meeting cashflow needs.",
-      benchmark: "Custom LDI Composite",
-      baseCurrency: "AUD",
-      inception: "2021-09-15",
-      aumAud: 2850000000,
-      feeBps: 20,
-      guidelines: [
-        "Key rate DV01 ±10% vs. liability curve",
-        "Credit rating floor: BBB-",
-        "Issuer limit: 3%",
-        "Cash buffer: 5% – 10%"
-      ],
-      sla: [
-        { id: "SLA-QBE-01", name: "Quarterly SLA report", freq: "Quarterly", nextDue: "2025-09-20" },
-        { id: "SLA-QBE-02", name: "ALM constraint attestation", freq: "Semi-annual", nextDue: "2026-01-15" }
+        { id: "SLA-SS-02", name: "Quarterly compliance", freq: "Quarterly", nextDue: "2025-09-30" }
       ],
       breaches: []
+    },
+    {
+      id: "M-LDI-FI-QB-002",
+      client: "QBE Insurance",
+      strategy: "LDI / Liability-Aware Fixed Income",
+      objective: "Match liability duration while achieving CPI+150 bps returns.",
+      benchmark: "AusBond Composite + Liability proxy",
+      baseCurrency: "AUD",
+      inception: "2021-11-15",
+      aumAud: 1800000000,
+      feeBps: 35,
+      guidelines: [
+        "Duration match within ±0.5 years",
+        "Credit quality: AAA–A minimum 80%",
+        "Interest rate hedge ratio: 85%–95%",
+        "Cash: 0% – 5%"
+      ],
+      sla: [
+        { id: "SLA-QB-01", name: "Monthly performance", freq: "Monthly", nextDue: "2025-08-20" },
+        { id: "SLA-QB-02", name: "Quarterly risk report", freq: "Quarterly", nextDue: "2025-10-15" }
+      ],
+      breaches: [
+        { date: "2025-07-22", type: "Duration", details: "Duration drift +0.6 years (limit: ±0.5)", resolved: true }
+      ]
     }
   ]
 };
 
-// List
 router.get("/", requireAuth, (req, res) => {
-  res.json(DB.mandates.map(m => ({
-    id: m.id,
-    client: m.client,
-    strategy: m.strategy,
-    benchmark: m.benchmark,
-    aumAud: m.aumAud,
-    feeBps: m.feeBps,
-    inception: m.inception,
-    openBreaches: m.breaches.filter(b => b.status !== "Closed").length
-  })));
+  res.json(DB.mandates);
 });
 
-// Detail
 router.get("/:id", requireAuth, (req, res) => {
-  const m = DB.mandates.find(x => x.id.toLowerCase() === req.params.id.toLowerCase());
-  if (!m) return res.status(404).json({ error: "Mandate not found" });
-  res.json(m);
-});
-
-// Log a breach (optionally raise an approval through the approvals API upstream)
-router.post("/:id/breaches", requireAuth, async (req, res) => {
-  const m = DB.mandates.find(x => x.id.toLowerCase() === req.params.id.toLowerCase());
-  if (!m) return res.status(404).json({ error: "Mandate not found" });
-
-  const { type, detail, raiseApproval = true } = req.body || {};
-  if (!type || !detail) return res.status(400).json({ error: "Missing type or detail" });
-
-  const breach = {
-    id: `BR-${Date.now()}`,
-    when: new Date().toISOString(),
-    type: String(type),
-    detail: String(detail),
-    status: "Open"
-  };
-
-  // Optionally create an approval item by calling our own approvals route (same server)
-  let approvalId = null;
-  if (raiseApproval) {
-    // We can't import the router here; instead client UI will call /approvals after this,
-    // or we could do a local fetch if we had the server base. Keep simple: just attach a mock ID.
-    approvalId = `AM-${String(Date.now()).slice(-5)}`;
-    breach.approvalId = approvalId;
-  }
-
-  m.breaches.unshift(breach);
-  res.status(201).json(breach);
-});
-
-// Close a breach
-router.post("/:id/breaches/:bid/close", requireAuth, (req, res) => {
-  const m = DB.mandates.find(x => x.id.toLowerCase() === req.params.id.toLowerCase());
-  if (!m) return res.status(404).json({ error: "Mandate not found" });
-  const b = m.breaches.find(x => x.id === req.params.bid);
-  if (!b) return res.status(404).json({ error: "Breach not found" });
-  b.status = "Closed";
-  res.json(b);
+  const mandate = DB.mandates.find(m => m.id === req.params.id);
+  if (!mandate) return res.status(404).json({ error: "Mandate not found" });
+  res.json(mandate);
 });
 
 export default router;
