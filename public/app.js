@@ -53,6 +53,18 @@ async function rfpSetStage(id, stage){
 async function rfpAddNote(id, text){
   return await api(`/rfps/${encodeURIComponent(id)}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
 }
+async function rfpToggleChecklist(id, key, done){
+  return await api(`/rfps/${encodeURIComponent(id)}/checklist`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ key, done })
+  });
+}
+async function rfpAddAttachment(id, payload){
+  return await api(`/rfps/${encodeURIComponent(id)}/attachments`, {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+}
 
 function fmtPct(n) {
   return `${Number(n).toFixed(2)}%`;
@@ -2142,31 +2154,88 @@ function ViewRfpDetail(){
           body.querySelector("#addNote").onclick = async () => {
             const t = body.querySelector("#noteText").value.trim();
             if (!t) return;
-            await rfpAddNote(r.id, t);
-            state.view = "rfp"; render(); // simple reload
+            const note = await rfpAddNote(r.id, t);
+            const list = body.querySelector("#notesList");
+            list.insertAdjacentHTML("afterbegin",
+              `<div class="card"><div class="p">
+                <div class="muted">${new Date(note.ts).toLocaleString()} — ${note.user}</div>
+                <div>${note.text}</div>
+              </div></div>`
+            );
+            body.querySelector("#noteText").value = "";
+            toast("Note added");
           };
           return;
         }
         if (name === "checklist"){
           body.innerHTML = `
             <table class="table">
-              <thead><tr><th>Item</th><th style="width:100px;">Done</th></tr></thead>
+              <thead><tr><th>Item</th><th style="width:120px;">Done</th></tr></thead>
               <tbody>${(r.checklist || []).map(c => `
-                <tr><td>${c.key}</td><td>${c.done ? "✅" : "—"}</td></tr>`).join("")}
+                <tr>
+                  <td>${c.key}</td>
+                  <td>
+                    <label class="switch">
+                      <input type="checkbox" data-key="${c.key}" ${c.done ? "checked" : ""}/>
+                      <span class="slider"></span>
+                    </label>
+                  </td>
+                </tr>`).join("")}
               </tbody>
             </table>
           `;
+          body.querySelector("tbody").addEventListener("change", async (e) => {
+            const key = e.target?.dataset?.key;
+            if (!key) return;
+            const done = !!e.target.checked;
+            try {
+              await rfpToggleChecklist(r.id, key, done);
+              toast("Checklist updated");
+            } catch (err) {
+              alert(err.message || "Failed to update");
+              e.target.checked = !done; // revert UI on error
+            }
+          });
           return;
         }
         if (name === "attachments"){
           body.innerHTML = `
+            <div class="inline">
+              <input id="attName" placeholder="File name (e.g., Perf-Appendix.pdf)" style="width: 280px;">
+              <select id="attType">
+                <option>PDF</option><option>DOCX</option><option>XLSX</option><option>PPTX</option>
+              </select>
+              <input id="attSize" placeholder="Size (e.g., 1.2 MB)" style="width: 120px;">
+              <button class="btn" id="addAtt">Add</button>
+            </div>
+            <div style="height:10px;"></div>
             <table class="table">
               <thead><tr><th>Name</th><th style="width:90px;">Type</th><th style="width:100px;">Size</th><th style="width:140px;">Uploaded</th></tr></thead>
-              <tbody>${(r.attachments || []).map(a => `
-                <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`).join("")}
+              <tbody id="attRows">
+                ${(r.attachments || []).map(a => `
+                  <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>
+                `).join("")}
               </tbody>
             </table>
           `;
+          const rows = body.querySelector("#attRows");
+          body.querySelector("#addAtt").onclick = async () => {
+            const name = body.querySelector("#attName").value.trim();
+            const type = body.querySelector("#attType").value;
+            const size = body.querySelector("#attSize").value.trim() || "—";
+            if (!name) return alert("Enter a file name");
+            try {
+              const a = await rfpAddAttachment(r.id, { name, type, size });
+              rows.insertAdjacentHTML("afterbegin",
+                `<tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`
+              );
+              toast("Attachment added");
+              body.querySelector("#attName").value = "";
+              body.querySelector("#attSize").value = "";
+            } catch (err) {
+              alert(err.message || "Failed to add attachment");
+            }
+          };
           return;
         }
       }

@@ -1,8 +1,8 @@
-
 // routes/admin.js
 import { Router } from "express";
 import { requireAuth } from "../lib/auth.js";
 import { readJson, writeJson } from "../lib/store.js";
+import { auditLog, auditList } from "../lib/audit.js";
 
 const router = Router();
 
@@ -29,7 +29,7 @@ function requireAdminRole(req, res, next) {
 router.use(requireAuth, requireAdminRole);
 
 // --- simple "uptime since boot" ---
-const BOOTED_AT = Date.now();
+const BOOTED_AT = new Date();
 
 // --- in-memory feature flags & audit log (resets on restart) ---
 const FLAGS = {
@@ -38,10 +38,6 @@ const FLAGS = {
   autoRefresh: true,
 };
 
-const AUDIT = [
-  { id: "A-0001", ts: new Date().toISOString(), actor: "system", action: "boot", detail: "Server started" },
-];
-
 // --- helpers ---
 function redactUsers(list = []) {
   return list.map(u => {
@@ -49,22 +45,14 @@ function redactUsers(list = []) {
     return safe;
   });
 }
-function log(actor, action, detail) {
-  AUDIT.unshift({
-    id: "A-" + String(1000 + AUDIT.length),
-    ts: new Date().toISOString(),
-    actor,
-    action,
-    detail,
-  });
-}
+
 
 // --- health ---
 router.get("/health", requireAuth, (_req, res) => {
   res.json({
     status: "ok",
-    bootedAt: new Date(BOOTED_AT).toISOString(),
-    uptimeSec: Math.floor((Date.now() - BOOTED_AT) / 1000),
+    bootedAt: BOOTED_AT.toISOString(),
+    uptimeSec: Math.floor((Date.now() - BOOTED_AT.getTime()) / 1000),
     version: "1.0.0-admin",
     node: process.version,
     env: {
@@ -93,7 +81,7 @@ router.put("/users/:email/role", requireAuth, (req, res) => {
   users[idx].role = String(role);
   writeJson("users.json", users);
 
-  log(req.user?.sub || "unknown", "user.role.update", `${email} -> ${role}`);
+  auditLog(req.user?.sub || "unknown", "user.role.update", `${email} -> ${role}`);
   const { password, ...safe } = users[idx];
   res.json({ user: safe, ok: true });
 });
@@ -108,7 +96,7 @@ router.put("/flags", requireAuth, (req, res) => {
   Object.keys(updates).forEach(k => {
     if (Object.prototype.hasOwnProperty.call(FLAGS, k)) {
       FLAGS[k] = Boolean(updates[k]);
-      log(req.user?.sub || "unknown", "flag.update", `${k}=${FLAGS[k]}`);
+      auditLog(req.user?.sub || "unknown", "flag.update", `${k}=${FLAGS[k]}`);
     }
   });
   res.json({ flags: FLAGS });
@@ -116,7 +104,7 @@ router.put("/flags", requireAuth, (req, res) => {
 
 // --- audit log ---
 router.get("/audit", requireAuth, (_req, res) => {
-  res.json({ audit: AUDIT.slice(0, 200), lastUpdated: new Date().toISOString() });
+  res.json({ audit: auditList(0, 200), lastUpdated: new Date().toISOString() });
 });
 
 export default router;
