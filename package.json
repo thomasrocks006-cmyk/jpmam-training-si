@@ -2,6 +2,7 @@
 {
   "name": "jpmam-training-sim",
   "version": "1.0.0",
+  "description": "J.P.Morgan Asset Management Training Simulator",
   "type": "module",
   "main": "server.js",
   "scripts": {
