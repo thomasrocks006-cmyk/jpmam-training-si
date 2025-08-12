@@ -166,7 +166,19 @@ ul li { margin: 6px 0; }
 .risk-bar > span { position:absolute; inset:0 100% 0 0; background:#8b5cf6; }
 @media (max-width: 900px){
   .risk-compact { grid-template-columns: 1fr; }
-} }
+}
+
+/* Admin switches */
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: #e5e7eb; transition: .2s; border-radius: 999px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; top: 3px; background: white; transition: .2s; border-radius: 999px; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+.switch input:checked + .slider { background: #10b981; }
+.switch input:checked + .slider:before { transform: translateX(16px); }
+
+/* Sidebar navlink (if needed) */
+.navlink { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.navlink:hover { background: #f3f4f6; }
 
 .dashboard-grid { display:grid; grid-template-columns: 1.1fr 1fr 1.2fr; gap: 16px; }
 .activity-feed { display:flex; flex-direction: column; gap: 10px; }

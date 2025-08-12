@@ -8,6 +8,26 @@ function fmtAUD(n) {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0 }).format(n);
 }
 
+// === Admin API helpers ===
+async function adminGetHealth(){ return await api("/admin/health"); }
+async function adminGetUsers(){ return await api("/admin/users"); }
+async function adminSetUserRole(email, role){
+  return await api(`/admin/users/${encodeURIComponent(email)}/role`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role })
+  });
+}
+async function adminGetFlags(){ return await api("/admin/flags"); }
+async function adminSetFlags(partial){
+  return await api("/admin/flags", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(partial || {})
+  });
+}
+async function adminGetAudit(){ return await api("/admin/audit"); }
+
 function fmtPct(n) {
   return `${Number(n).toFixed(2)}%`;
 }
@@ -411,7 +431,7 @@ function sidebar() {
   el.querySelector("#mandatesLink").onclick = () => setState({ view: "mandates" });
   el.querySelector("#rfpsLink").onclick = () => alert("RFPs view is mocked.");
   el.querySelector("#riskLink").onclick = () => setState({ view: "portfolio-risk" });
-  el.querySelector("#adminLink").onclick = () => alert("Admin view is mocked.");
+  el.querySelector("#adminLink").onclick = () => setState({ view: "admin" });
   return el;
 }
 
@@ -1592,6 +1612,191 @@ function openApprovalsPending() {
 // Global function for mandate links
 window.viewMandate = (id) => setState({ view: "mandate", selectedMandate: id });
 
+function ViewAdmin(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  // Sidebar
+  wrap.appendChild(sidebar());
+
+  // Main
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Admin</h2>
+        <small class="muted">Manage users, flags, logs & health</small>
+      </div>
+      <div class="tabs" id="tabs">
+        <div class="tab active" data-tab="users">Users</div>
+        <div class="tab" data-tab="flags">Feature Flags</div>
+        <div class="tab" data-tab="audit">Audit Log</div>
+        <div class="tab" data-tab="health">System Health</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const tabs = card.querySelector("#tabs");
+  const body = card.querySelector("#body");
+
+  async function showUsers(){
+    body.innerHTML = `<div class="muted">Loading users…</div>`;
+    try {
+      const { users=[] } = await adminGetUsers();
+      body.innerHTML = `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th style="width:160px;"></th></tr></thead>
+          <tbody>
+            ${users.map(u => `
+              <tr>
+                <td>${u.name || "-"}</td>
+                <td>${u.email || "-"}</td>
+                <td>${u.role || "Analyst"}</td>
+                <td>
+                  <div class="inline">
+                    <select data-email="${u.email}">
+                      ${["Analyst","Coverage","Risk","Admin"].map(r => `<option ${r===(u.role||"Analyst")?"selected":""}>${r}</option>`).join("")}
+                    </select>
+                    <button class="btn" data-action="set-role" data-email="${u.email}">Save</button>
+                  </div>
+                </td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+      body.querySelector("tbody").addEventListener("click", async (e) => {
+        if (e.target?.dataset?.action === "set-role"){
+          const email = e.target.dataset.email;
+          const sel = body.querySelector(`select[data-email="${CSS.escape(email)}"]`);
+          const role = sel?.value;
+          e.target.disabled = true;
+          try {
+            await adminSetUserRole(email, role);
+            toast("Saved");
+          } catch(err){
+            alert(err.message || "Failed to update role");
+          } finally {
+            e.target.disabled = false;
+          }
+        }
+      });
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function showFlags(){
+    body.innerHTML = `<div class="muted">Loading flags…</div>`;
+    try {
+      const { flags={} } = await adminGetFlags();
+      body.innerHTML = `
+        <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
+          ${Object.keys(flags).map(k => `
+            <div class="card" style="border:1px solid var(--line);">
+              <div class="p">
+                <div class="flex-between">
+                  <b>${k}</b>
+                  <label class="switch">
+                    <input type="checkbox" data-flag="${k}" ${flags[k] ? "checked": ""}/>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                <small class="muted">Toggle ${k}</small>
+              </div>
+            </div>`).join("")}
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn" id="saveFlags">Save Changes</button>
+        </div>
+      `;
+      body.querySelector("#saveFlags").onclick = async () => {
+        const inputs = body.querySelectorAll("input[data-flag]");
+        const payload = {};
+        inputs.forEach(i => payload[i.dataset.flag] = i.checked);
+        try {
+          await adminSetFlags(payload);
+          toast("Flags updated");
+        } catch(e){ alert(e.message || "Failed to update flags"); }
+      };
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function showAudit(){
+    body.innerHTML = `<div class="muted">Loading audit…</div>`;
+    try {
+      const { audit=[] } = await adminGetAudit();
+      body.innerHTML = `
+        <table class="table">
+          <thead><tr><th style="width:110px;">ID</th><th style="width:160px;">Time</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
+          <tbody>
+            ${audit.map(a => `
+              <tr>
+                <td>${a.id}</td>
+                <td>${new Date(a.ts).toLocaleString()}</td>
+                <td>${a.actor}</td>
+                <td>${a.action}</td>
+                <td>${a.detail || ""}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function showHealth(){
+    body.innerHTML = `<div class="muted">Loading health…</div>`;
+    try {
+      const h = await adminGetHealth();
+      body.innerHTML = `
+        <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
+          <div class="card"><div class="p"><b>Status</b><div>${h.status}</div></div></div>
+          <div class="card"><div class="p"><b>Uptime</b><div>${h.uptimeSec}s</div></div></div>
+          <div class="card"><div class="p"><b>Booted</b><div>${new Date(h.bootedAt).toLocaleString()}</div></div></div>
+          <div class="card"><div class="p"><b>Version</b><div>${h.version}</div></div></div>
+          <div class="card"><div class="p"><b>Node</b><div>${h.node}</div></div></div>
+          <div class="card"><div class="p"><b>Env</b><div>PORT=${h.env.PORT} / NODE_ENV=${h.env.NODE_ENV}</div></div></div>
+        </div>
+      `;
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function setTab(name){
+    tabs.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    tabs.querySelector(`.tab[data-tab="${name}"]`)?.classList.add("active");
+    if (name === "users") return showUsers();
+    if (name === "flags") return showFlags();
+    if (name === "audit") return showAudit();
+    if (name === "health") return showHealth();
+  }
+
+  tabs.addEventListener("click", (e) => {
+    const el = e.target.closest(".tab");
+    if (!el) return;
+    setTab(el.dataset.tab);
+  });
+
+  setTab("users");
+  return root;
+}
+
 function ViewPortfolioRisk() {
   const root = document.createElement("div");
   root.className = "container";
@@ -1800,6 +2005,7 @@ function render() {
   else if (state.view === "mandates") view = ViewMandates();
   else if (state.view === "mandate") view = ViewMandateDetail();
   else if (state.view === "portfolio-risk") view = ViewPortfolioRisk(); // New view
+  else if (state.view === "admin") view = ViewAdmin();
   app.appendChild(view);
 }
 
