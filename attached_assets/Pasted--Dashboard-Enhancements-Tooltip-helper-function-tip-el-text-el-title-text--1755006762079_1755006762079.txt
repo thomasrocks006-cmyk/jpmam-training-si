@@ -1,0 +1,153 @@
+// === Dashboard Enhancements ===
+
+// Tooltip helper
+function tip(el, text){
+  el.title = text;
+  return el;
+}
+
+// Fetch dashboard metrics
+async function fetchDashboardMetrics(){
+  const r = await apiGet("/dashboard/metrics");
+  return r;
+}
+
+// Fetch activity feed
+async function fetchActivity(){
+  const r = await apiGet("/dashboard/activity");
+  return r.feed || [];
+}
+
+// Fetch market snapshot
+async function fetchMarket(){
+  return await apiGet("/market/snapshot");
+}
+
+// Build the At-a-Glance metrics row
+function buildMetricsRow(metrics){
+  const row = document.createElement("div");
+  row.className = "metrics-row grid-4";
+  const tiles = [
+    {
+      label: "Total AUM",
+      value: fmtAUD(metrics.totalAumAud),
+      sub: `${fmtPct(metrics.mtdChangePct)} MTD`,
+      tip: `Last updated ${new Date(metrics.lastUpdated).toLocaleString()} • Source: Clients (mock)`,
+      onClick: () => { state.view = "clients"; render(); }
+    },
+    {
+      label: "Pending Approvals",
+      value: String(metrics.approvals.pending),
+      sub: "Click to review",
+      tip: "Approvals with status = Pending",
+      onClick: () => openApprovalsPending()
+    },
+    {
+      label: "Breaches (30d)",
+      value: String(metrics.breachesLast30),
+      sub: "Mandate exceptions",
+      tip: "Count of mandate breaches in the last 30 days",
+      onClick: () => { state.view = "mandates"; render(); }
+    },
+    {
+      label: "Meetings (7d)",
+      value: String(metrics.meetings.length),
+      sub: metrics.meetings.map(m=>`${m.client} – ${new Date(m.when).toLocaleDateString()}`).join(" • ") || "None",
+      tip: "Upcoming client meetings in next 7 days",
+      onClick: () => { state.view = "clients"; render(); }
+    }
+  ];
+
+  tiles.forEach(t => {
+    const tile = document.createElement("div");
+    tile.className = "metric-tile card hover";
+    tile.innerHTML = `
+      <div class="p">
+        <div class="muted">${t.label}</div>
+        <div class="metric-val">${t.value}</div>
+        <div class="muted small">${t.sub}</div>
+      </div>`;
+    tip(tile, t.tip);
+    tile.addEventListener("click", t.onClick);
+    row.appendChild(tile);
+  });
+  return row;
+}
+
+// Build Recent Activity feed
+function buildActivityFeed(items){
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between"><h3>Recent Activity</h3><small class="muted" id="lastAct"></small></div>
+      <div id="feed" class="activity-feed"></div>
+    </div>`;
+  const feed = card.querySelector("#feed");
+  const last = card.querySelector("#lastAct");
+
+  function draw(){
+    feed.innerHTML = items.map(ev => `
+      <div class="activity-row">
+        <div class="activity-meta">
+          <span class="pill ${ev.type}">${ev.type.toUpperCase()}</span>
+          <small class="muted">${new Date(ev.ts).toLocaleTimeString()}</small>
+        </div>
+        <div class="activity-text">
+          <b>${ev.ref}</b> — ${ev.text} <span class="muted">(${ev.status})</span>
+        </div>
+      </div>`
+    ).join("");
+    last.textContent = "Updated " + new Date().toLocaleTimeString();
+  }
+  draw();
+
+  // Click wiring (delegate)
+  feed.addEventListener("click", (e) => {
+    const row = e.target.closest(".activity-row");
+    if (!row) return;
+    const txt = row.textContent;
+    if (txt.includes("AM-")) openApprovalsPending();
+    else if (txt.includes("BR-")) { state.view = "mandates"; render(); }
+    else if (txt.includes("RISK-")) { state.view = "portfolio-risk"; render(); }
+  });
+
+  // Auto-refresh every 30s
+  setInterval(async () => {
+    const latest = await fetchActivity();
+    items = latest;
+    draw();
+  }, 30000);
+
+  return card;
+}
+
+// Build Market Snapshot
+function buildMarketSnapshot(snap){
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h3>Market Snapshot</h3>
+        <button id="expand" class="btn-ghost">Open Market View</button>
+      </div>
+      <div class="market-grid">
+        <div class="mkt-item">
+          <div class="muted small">${snap.asx200.label}</div>
+          <div class="mkt-val ${snap.asx200.chgPct >= 0 ? 'pos' : 'neg'}">${fmtPct(snap.asx200.chgPct)}</div>
+        </div>
+        <div class="mkt-item">
+          <div class="muted small">${snap.audusd.label}</div>
+          <div class="mkt-val ${snap.audusd.chgPct >= 0 ? 'pos' : 'neg'}">${snap.audusd.level.toFixed(2)} (${fmtPct(snap.audusd.chgPct)})</div>
+        </div>
+        <div class="mkt-item">
+          <div class="muted small">${snap.spx.label}</div>
+          <div class="mkt-val ${snap.spx.chgPct >= 0 ? 'pos' : 'neg'}">${fmtPct(snap.spx.chgPct)}</div>
+        </div>
+      </div>
+      <small class="muted">Last updated ${new Date(snap.lastUpdated).toLocaleTimeString()}</small>
+    </div>`;
+  card.querySelector("#expand").onclick = () => { state.view = "report"; state.reportCode = "RISK-VaR-TE"; render(); };
+  return card;
+}
