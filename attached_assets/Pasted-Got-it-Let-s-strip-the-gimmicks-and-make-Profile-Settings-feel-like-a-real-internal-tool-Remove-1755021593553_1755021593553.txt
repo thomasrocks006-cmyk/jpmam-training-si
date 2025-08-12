@@ -1,0 +1,81 @@
+Got it. Let’s strip the gimmicks and make Profile & Settings feel like a real internal tool:
+
+Remove profile completeness & any “playful” UI
+
+Add proper corporate identity & employment fields:
+
+Employee ID
+
+Date of Birth
+
+Team/Department
+
+Manager
+
+Cost Center
+
+Office Location
+
+Market-data / Systems Access (Bloomberg, FactSet, JPM Proprietary, Aladdin, Morningstar)
+
+Keep security + preferences, but presentation is clean and businesslike.
+
+Below are paste-ready updates for backend + frontend + small CSS.
+
+1) Backend — allow new corporate fields
+Open routes/users.js and replace the PUT /api/users/me handler with this version (only this handler needs changing):
+
+js
+Copy code
+// PUT /api/users/me  (update profile fields)
+router.put("/me", requireAuth, (req, res) => {
+  const users = loadUsers();
+  const me = findByEmail(users, req.user?.sub);
+  if (!me) return res.status(404).json({ error: "User not found" });
+
+  const {
+    name, phone, photo,
+    employeeId,           // NEW
+    dob,                  // NEW (YYYY-MM-DD)
+    team,                 // NEW
+    manager,              // NEW
+    costCenter,           // NEW
+    office,               // NEW
+    employmentType,       // optional
+    systemsAccess         // NEW { bloomberg, factset, jpmProp, aladdin, morningstar }
+  } = req.body || {};
+
+  if (name != null) me.name = String(name).slice(0, 120);
+  if (phone != null) me.phone = String(phone).slice(0, 40);
+  if (photo != null) me.photo = String(photo);
+
+  if (employeeId != null) me.employeeId = String(employeeId).slice(0, 40);
+  if (team != null) me.team = String(team).slice(0, 80);
+  if (manager != null) me.manager = String(manager).slice(0, 120);
+  if (costCenter != null) me.costCenter = String(costCenter).slice(0, 40);
+  if (office != null) me.office = String(office).slice(0, 80);
+  if (employmentType != null) me.employmentType = String(employmentType).slice(0, 40);
+
+  if (dob != null) {
+    const d = String(dob);
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(d);
+    if (!ok) return res.status(400).json({ error: "dob must be YYYY-MM-DD" });
+    me.dob = d;
+  }
+
+  if (systemsAccess && typeof systemsAccess === "object") {
+    me.systemsAccess = {
+      bloomberg:   !!systemsAccess.bloomberg,
+      factset:     !!systemsAccess.factset,
+      jpmProp:     !!systemsAccess.jpmProp,
+      aladdin:     !!systemsAccess.aladdin,
+      morningstar: !!systemsAccess.morningstar
+    };
+  }
+
+  saveUsers(users);
+  auditLog(req.user?.sub || "user", "profile.update", `${me.email}`);
+  return res.json(safeUser(me));
+});
+Nothing else in the backend needs to change. New fields will be persisted in users.json.
+
