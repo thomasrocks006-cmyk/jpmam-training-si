@@ -6,6 +6,28 @@ import { readJson, writeJson } from "../lib/store.js";
 
 const router = Router();
 
+// Require "Admin" role
+function requireAdminRole(req, res, next) {
+  try {
+    // req.user.sub is set by requireAuth (email/username)
+    const email = (req.user?.sub || "").toLowerCase();
+    if (!email) return res.status(401).json({ error: "Unauthenticated" });
+
+    // read from users.json to get current role
+    const users = readJson("users.json");
+    const me = users.find(u => (u.email || "").toLowerCase() === email);
+    if (!me || String(me.role || "Analyst") !== "Admin") {
+      return res.status(403).json({ error: "Forbidden: Admins only" });
+    }
+    next();
+  } catch (e) {
+    return res.status(500).json({ error: "Role check failed" });
+  }
+}
+
+// Apply to all admin endpoints
+router.use(requireAuth, requireAdminRole);
+
 // --- simple "uptime since boot" ---
 const BOOTED_AT = Date.now();
 

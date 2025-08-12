@@ -8,6 +8,16 @@ function fmtAUD(n) {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0 }).format(n);
 }
 
+// --- Current user helper (cached) ---
+let CURRENT_USER = null;
+async function fetchMe(){
+  if (CURRENT_USER) return CURRENT_USER;
+  try {
+    CURRENT_USER = await api("/auth/me");
+  } catch { CURRENT_USER = null; }
+  return CURRENT_USER;
+}
+
 // === Admin API helpers ===
 async function adminGetHealth(){ return await api("/admin/health"); }
 async function adminGetUsers(){ return await api("/admin/users"); }
@@ -27,6 +37,22 @@ async function adminSetFlags(partial){
   });
 }
 async function adminGetAudit(){ return await api("/admin/audit"); }
+
+// === RFPs API ===
+async function rfpList(params = {}){
+  const qs = new URLSearchParams(params).toString();
+  return await api(`/rfps${qs ? `?${qs}` : ""}`);
+}
+async function rfpGet(id){ return await api(`/rfps/${encodeURIComponent(id)}`); }
+async function rfpCreate(payload){
+  return await api("/rfps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+}
+async function rfpSetStage(id, stage){
+  return await api(`/rfps/${encodeURIComponent(id)}/stage`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }) });
+}
+async function rfpAddNote(id, text){
+  return await api(`/rfps/${encodeURIComponent(id)}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+}
 
 function fmtPct(n) {
   return `${Number(n).toFixed(2)}%`;
@@ -84,7 +110,7 @@ const state = {
 
 function setState(next) {
   Object.assign(state, next);
-  render();
+  render().catch(console.error);
 }
 
 async function api(path, opts = {}) {
@@ -416,22 +442,65 @@ function goToSuggestion(item) {
 function sidebar() {
   const el = document.createElement("div");
   el.className = "sidebar";
-  el.innerHTML = `
-    <div class="card"><div class="p">
-      <div class="row link" id="dashboardLink"><span>🏠</span> Dashboard</div>
-      <div class="row link" id="clientsLink" style="margin-top:8px;"><span>👥</span> Clients</div>
-      <div class="row link" id="mandatesLink" style="margin-top:8px;"><span>📈</span> Mandates</div>
-      <div class="row link" id="rfpsLink" style="margin-top:8px;"><span>💼</span> RFPs</div>
-      <div class="row link" id="riskLink" style="margin-top:8px;"><span>🛡️</span> Portfolio Risk</div>
-      <div class="row link" id="adminLink" style="margin-top:8px;"><span>⚙️</span> Admin</div>
-    </div></div>
-  `;
-  el.querySelector("#dashboardLink").onclick = () => setState({ view: "dashboard" });
-  el.querySelector("#clientsLink").onclick = () => setState({ view: "clients" });
-  el.querySelector("#mandatesLink").onclick = () => setState({ view: "mandates" });
-  el.querySelector("#rfpsLink").onclick = () => alert("RFPs view is mocked.");
-  el.querySelector("#riskLink").onclick = () => setState({ view: "portfolio-risk" });
-  el.querySelector("#adminLink").onclick = () => setState({ view: "admin" });
+  
+  const side = document.createElement("div");
+  side.className = "card";
+  side.innerHTML = `<div class="p"></div>`;
+  const p = side.querySelector(".p");
+  
+  // Dashboard link
+  const dashboardLink = document.createElement("div");
+  dashboardLink.className = "navlink";
+  dashboardLink.innerHTML = `<span>🏠</span> Dashboard`;
+  dashboardLink.onclick = () => setState({ view: "dashboard" });
+  p.appendChild(dashboardLink);
+  
+  // Clients link
+  const clientsLink = document.createElement("div");
+  clientsLink.className = "navlink";
+  clientsLink.style.marginTop = "8px";
+  clientsLink.innerHTML = `<span>👥</span> Clients`;
+  clientsLink.onclick = () => setState({ view: "clients" });
+  p.appendChild(clientsLink);
+  
+  // Mandates link
+  const mandatesLink = document.createElement("div");
+  mandatesLink.className = "navlink";
+  mandatesLink.style.marginTop = "8px";
+  mandatesLink.innerHTML = `<span>📈</span> Mandates`;
+  mandatesLink.onclick = () => setState({ view: "mandates" });
+  p.appendChild(mandatesLink);
+  
+  // RFPs link
+  const rfpsLink = document.createElement("div");
+  rfpsLink.className = "navlink";
+  rfpsLink.style.marginTop = "8px";
+  rfpsLink.innerHTML = `<span>💼</span> RFPs`;
+  rfpsLink.onclick = () => { state.view = "rfps"; render(); };
+  p.appendChild(rfpsLink);
+  
+  // Portfolio Risk link
+  const riskLink = document.createElement("div");
+  riskLink.className = "navlink";
+  riskLink.style.marginTop = "8px";
+  riskLink.innerHTML = `<span>🛡️</span> Portfolio Risk`;
+  riskLink.onclick = () => setState({ view: "portfolio-risk" });
+  p.appendChild(riskLink);
+  
+  // Admin link (only show for Admins)
+  (async () => {
+    const me = await fetchMe();
+    if (me?.role === "Admin") {
+      const adminLink = document.createElement("div");
+      adminLink.className = "navlink";
+      adminLink.style.marginTop = "8px";
+      adminLink.innerHTML = `<span>⚙️</span> Admin`;
+      adminLink.onclick = () => { state.view = "admin"; render(); };
+      p.appendChild(adminLink);
+    }
+  })();
+  
+  el.appendChild(side);
   return el;
 }
 
@@ -1612,7 +1681,21 @@ function openApprovalsPending() {
 // Global function for mandate links
 window.viewMandate = (id) => setState({ view: "mandate", selectedMandate: id });
 
-function ViewAdmin(){
+async function ViewAdmin(){
+  // Role gate
+  const me = await fetchMe();
+  if (!me || me.role !== "Admin") {
+    const root = document.createElement("div");
+    root.className = "container";
+    root.appendChild(topNav());
+    const wrap = document.createElement("div"); wrap.className = "layout"; root.appendChild(wrap);
+    wrap.appendChild(sidebar());
+    const main = document.createElement("div"); main.className = "main"; wrap.appendChild(main);
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<div class="p"><h2>Forbidden</h2><div class="muted">You don't have permission to access Admin.</div></div>`;
+    main.appendChild(card);
+    return root;
+  }
   const root = document.createElement("div");
   root.className = "container";
   root.appendChild(topNav());
@@ -1794,6 +1877,244 @@ function ViewAdmin(){
   });
 
   setTab("users");
+  return root;
+}
+
+function ViewRfps(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  // Sidebar
+  wrap.appendChild(sidebar());
+
+  // Main
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>RFPs</h2>
+        <div class="inline">
+          <input id="q" placeholder="Search id/title…" style="width: 220px;">
+          <select id="stage">
+            <option value="">All stages</option>
+            ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option>${s}</option>`).join("")}
+          </select>
+          <button class="btn" id="new">New RFP</button>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <table class="table">
+        <thead>
+          <tr><th style="width:160px;">ID</th><th>Title</th><th style="width:160px;">Client</th><th style="width:150px;">Stage</th><th style="width:120px;">Due</th><th style="width:120px;"></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const rows = card.querySelector("#rows");
+  const q = card.querySelector("#q");
+  const stage = card.querySelector("#stage");
+
+  async function refresh(){
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+    try {
+      const { rfps=[] } = await rfpList({ q: q.value, stage: stage.value });
+      rows.innerHTML = rfps.map(r => `
+        <tr>
+          <td>${r.id}</td>
+          <td>${r.title}</td>
+          <td>${r.client}</td>
+          <td><span class="pill">${r.stage}</span></td>
+          <td>${r.due || "-"}</td>
+          <td><button class="btn-ghost" data-id="${r.id}">Open</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="muted">No RFPs</td></tr>`;
+    } catch(e){
+      rows.innerHTML = `<tr><td colspan="6" style="color:#b91c1c">${e.message}</td></tr>`;
+    }
+  }
+
+  q.oninput = () => refresh();
+  stage.onchange = () => refresh();
+  refresh();
+
+  // New RFP (tiny inline dialog)
+  card.querySelector("#new").onclick = async () => {
+    const id = prompt("RFP ID (e.g., RFP-SS-24Q3):");
+    const client = id ? prompt("Client (e.g., SunSuper):") : null;
+    const title = client ? prompt("Title:") : null;
+    if (!id || !client || !title) return;
+    try { await rfpCreate({ id, client, title }); await refresh(); }
+    catch(e){ alert(e.message || "Failed to create RFP"); }
+  };
+
+  // Open detail
+  rows.addEventListener("click", async (e) => {
+    const id = e.target?.dataset?.id;
+    if (!id) return;
+    state.view = "rfp";
+    state.rfpId = id;
+    render();
+  });
+
+  return root;
+}
+
+function ViewRfpDetail(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>RFP: <span id="rid"></span></h2>
+        <button class="btn" id="back">← All RFPs</button>
+      </div>
+      <div class="sep" style="margin:10px 0;"></div>
+      <div id="meta" class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px;"></div>
+
+      <div class="tabs" id="tabs" style="margin-top:10px;">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="notes">Notes</div>
+        <div class="tab" data-tab="checklist">Checklist</div>
+        <div class="tab" data-tab="attachments">Attachments</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const rid = card.querySelector("#rid");
+  const meta = card.querySelector("#meta");
+  const body = card.querySelector("#body");
+  const tabs = card.querySelector("#tabs");
+
+  card.querySelector("#back").onclick = () => { state.view = "rfps"; render(); };
+
+  async function load(){
+    try {
+      const r = await rfpGet(state.rfpId);
+      rid.textContent = r.id;
+      meta.innerHTML = `
+        <div class="card"><div class="p"><b>Title</b><div>${r.title}</div></div></div>
+        <div class="card"><div class="p"><b>Client</b><div>${r.client}</div></div></div>
+        <div class="card"><div class="p"><b>Owner</b><div>${r.owner}</div></div></div>
+        <div class="card"><div class="p"><b>Stage</b>
+          <div class="inline">
+            <select id="stageSel">
+              ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option ${s===r.stage?"selected":""}>${s}</option>`).join("")}
+            </select>
+            <button class="btn" id="saveStage">Save</button>
+          </div>
+        </div></div>
+        <div class="card"><div class="p"><b>Due</b><div>${r.due || "-"}</div></div></div>
+        <div class="card"><div class="p"><b>Updated</b><div>${new Date(r.lastUpdated).toLocaleString()}</div></div></div>
+      `;
+
+      async function renderTab(name){
+        if (name === "overview") {
+          body.innerHTML = `
+            <div class="muted">Use the controls above to manage stage. Other sections are in the tabs.</div>
+          `;
+          return;
+        }
+        if (name === "notes"){
+          body.innerHTML = `
+            <div class="inline">
+              <input id="noteText" placeholder="Add a note..." style="width: 60%;">
+              <button class="btn" id="addNote">Add</button>
+            </div>
+            <div style="height:8px;"></div>
+            <div id="notesList"></div>
+          `;
+          const list = body.querySelector("#notesList");
+          list.innerHTML = (r.notes || []).map(n => `
+            <div class="card"><div class="p">
+              <div class="muted">${new Date(n.ts).toLocaleString()} — ${n.user}</div>
+              <div>${n.text}</div>
+            </div></div>
+          `).join("") || `<div class="muted">No notes.</div>`;
+          body.querySelector("#addNote").onclick = async () => {
+            const t = body.querySelector("#noteText").value.trim();
+            if (!t) return;
+            await rfpAddNote(r.id, t);
+            state.view = "rfp"; render(); // simple reload
+          };
+          return;
+        }
+        if (name === "checklist"){
+          body.innerHTML = `
+            <table class="table">
+              <thead><tr><th>Item</th><th style="width:100px;">Done</th></tr></thead>
+              <tbody>${(r.checklist || []).map(c => `
+                <tr><td>${c.key}</td><td>${c.done ? "✅" : "—"}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          `;
+          return;
+        }
+        if (name === "attachments"){
+          body.innerHTML = `
+            <table class="table">
+              <thead><tr><th>Name</th><th style="width:90px;">Type</th><th style="width:100px;">Size</th><th style="width:140px;">Uploaded</th></tr></thead>
+              <tbody>${(r.attachments || []).map(a => `
+                <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          `;
+          return;
+        }
+      }
+
+      // Tab wiring
+      tabs.addEventListener("click", (e) => {
+        const t = e.target.closest(".tab");
+        if (!t) return;
+        tabs.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+        t.classList.add("active");
+        renderTab(t.dataset.tab);
+      });
+      await renderTab("overview");
+
+      // Save stage
+      card.querySelector("#saveStage").onclick = async () => {
+        const val = card.querySelector("#stageSel").value;
+        await rfpSetStage(r.id, val);
+        toast("RFP stage updated");
+        state.view = "rfp"; render();
+      };
+
+    } catch(e){
+      main.innerHTML = `<div class="card"><div class="p" style="color:#b91c1c">${e.message}</div></div>`;
+    }
+  }
+
+  load();
   return root;
 }
 
@@ -1991,7 +2312,7 @@ function ViewPortfolioRisk() {
 }
 
 // ---------- Root render ----------
-function render() {
+async function render() {
   const app = document.getElementById("app");
   app.innerHTML = "";
   let view;
@@ -2004,10 +2325,12 @@ function render() {
   else if (state.view === "profile") view = ViewProfile();
   else if (state.view === "mandates") view = ViewMandates();
   else if (state.view === "mandate") view = ViewMandateDetail();
-  else if (state.view === "portfolio-risk") view = ViewPortfolioRisk(); // New view
-  else if (state.view === "admin") view = ViewAdmin();
+  else if (state.view === "portfolio-risk") view = ViewPortfolioRisk();
+  else if (state.view === "rfps") view = ViewRfps();
+  else if (state.view === "rfp") view = ViewRfpDetail();
+  else if (state.view === "admin") view = await ViewAdmin();
   app.appendChild(view);
 }
 
 // initial
-render();
+render().catch(console.error);

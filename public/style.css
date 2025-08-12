@@ -180,6 +180,9 @@ ul li { margin: 6px 0; }
 .navlink { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .navlink:hover { background: #f3f4f6; }
 
+.inline { display: inline-flex; gap: 8px; align-items: center; }
+.sep { height:1px; background: var(--line); } }
+
 .dashboard-grid { display:grid; grid-template-columns: 1.1fr 1fr 1.2fr; gap: 16px; }
 .activity-feed { display:flex; flex-direction: column; gap: 10px; }
 .activity-row { display:grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 8px 0; border-bottom:1px dashed var(--line); }
