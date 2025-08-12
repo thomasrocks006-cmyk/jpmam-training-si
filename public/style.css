@@ -119,6 +119,13 @@ ul li { margin: 6px 0; }
 }
 .row-blink { animation: rowBlink 1.1s ease-out 1; }
 
+/* Breaches styling */
+.pill.open { background:#fef3c7; color:#92400e; }
+.pill.resolved { background:#d1fae5; color:#065f46; }
+.badge.critical { background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+.badge.medium { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+.badge.low { background:#ecfeff; color:#155e75; border:1px solid #a5f3fc; }
+
 /* === Dashboard enhancements === */
 .metrics-row { display:grid; gap:12px; margin-bottom:12px; }
 .metrics-row.grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }

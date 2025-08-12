@@ -1208,6 +1208,45 @@ function ViewClientDetail() {
   }
   function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+// === Mandate Breaches helpers ===
+async function fetchMandateDetail(id){
+  return await api(`/mandates/${encodeURIComponent(id)}`);
+}
+
+function buildBreachesPanel(mandate){
+  const breaches = mandate.breaches || [];
+  const el = document.createElement("div");
+  el.innerHTML = breaches.length ? `
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width:140px;">Breach ID</th>
+          <th>Type</th>
+          <th style="width:110px;">Severity</th>
+          <th style="width:100px;">Status</th>
+          <th style="width:120px;">Opened</th>
+          <th style="width:120px;">Resolved</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breaches.map(b => `
+          <tr>
+            <td>${b.id}</td>
+            <td>${b.type}</td>
+            <td><span class="badge ${String(b.severity||'').toLowerCase()}">${b.severity || '-'}</span></td>
+            <td><span class="pill ${String(b.status||'').toLowerCase()}">${b.status || '-'}</span></td>
+            <td>${b.opened ? new Date(b.opened).toLocaleDateString() : '-'}</td>
+            <td>${b.resolved ? new Date(b.resolved).toLocaleDateString() : '-'}</td>
+            <td>${b.note || ''}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  ` : `<div class="muted">✅ No breaches for this mandate.</div>`;
+  return el;
+}
+
   return root;
 }
 
@@ -1309,6 +1348,12 @@ function ViewMandateDetail() {
         <button id="back" class="btn">← All Mandates</button>
       </div>
       <div style="height:10px;"></div>
+      ${!mandate?.editMode ? `
+        <div class="tabs">
+          <div class="tab active" data-tab="overview">Overview</div>
+          <div class="tab" data-tab="breaches">Breaches</div>
+        </div>
+      ` : ''}
       <div class="section" id="content"><small class="muted">Loading…</small></div>
       ${mandate?.editMode ? `
         <div class="section">
@@ -1326,6 +1371,31 @@ function ViewMandateDetail() {
 
   const content = card.querySelector("#content");
   let formData = mandate ? { ...mandate } : {};
+  let currentTab = "overview";
+  let mandateData = null;
+
+  async function renderTab(tabName) {
+    content.innerHTML = `<div class="muted">Loading…</div>`;
+    currentTab = tabName;
+    
+    if (tabName === "breaches") {
+      try {
+        if (!mandateData) {
+          mandateData = await fetchMandateDetail(mandate.id);
+        }
+        content.innerHTML = "";
+        content.appendChild(buildBreachesPanel(mandateData));
+      } catch (e) {
+        content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+      }
+      return;
+    }
+    
+    if (tabName === "overview") {
+      updateForm();
+      return;
+    }
+  }
 
   function updateForm() {
     content.innerHTML = `
@@ -1356,16 +1426,38 @@ function ViewMandateDetail() {
     }
   }
 
+  // Tab click handler
+  if (!mandate?.editMode) {
+    card.addEventListener("click", (e) => {
+      const t = e.target.closest(".tab");
+      if (!t) return;
+      card.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      renderTab(t.dataset.tab);
+    });
+  }
+
   if (!mandate) {
     // Mock data for new mandate
     formData = { id: Date.now(), client: "", strategy: "", aumAud: 0, status: "Pending", lastUpdate: new Date().toISOString().split('T')[0] };
     updateForm();
+  } else if (!mandate.editMode) {
+    // Fetch actual data and render overview tab
+    (async()=>{
+      try {
+        mandateData = await api(`/mandates/${mandate.id}`);
+        Object.assign(formData, mandateData);
+        renderTab("overview");
+      } catch(e) {
+        content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+      }
+    })();
   } else {
-    // Fetch actual data if not in edit mode or if more details are needed
+    // Edit mode
     (async()=>{
       try {
         const data = await api(`/mandates/${mandate.id}`);
-        Object.assign(formData, data); // Merge fetched data
+        Object.assign(formData, data);
         updateForm();
       } catch(e) {
         content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
@@ -1392,8 +1484,6 @@ function ViewMandateDetail() {
     card.querySelector("#cancel").onclick = () => {
       setState({ view: "mandates", selectedMandate: null, editMode: false });
     };
-  } else {
-    updateForm(); // Render for view mode
   }
 
   return root;
