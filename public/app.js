@@ -1,7 +1,7 @@
 // Minimal front-end using vanilla JS + fetch to the API in this project.
 // Branding is mock: "JPMorgan (Training)" / "JPMorgan Asset Management (Training)".
 
-const API = window.API_BASE;
+const API = window.API_BASE || "/api";
 
 // Helper formatting functions
 function fmtAUD(n) {
