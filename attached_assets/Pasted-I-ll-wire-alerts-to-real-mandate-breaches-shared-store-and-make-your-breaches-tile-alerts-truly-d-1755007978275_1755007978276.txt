@@ -1,0 +1,201 @@
+I’ll wire alerts to real mandate breaches (shared store), and make your breaches tile/alerts truly data-driven. Paste these changes in order.
+
+1) New shared store: lib/mandatesStore.js
+Create this file:
+
+js
+Copy code
+// lib/mandatesStore.js
+// Single source of truth for mandates + breaches (in-memory demo)
+
+const MANDATES = [
+  {
+    id: "M-AUS-EQ-SS-001",
+    client: "SunSuper",
+    strategy: "Australian Equity Core",
+    benchmark: "S&P/ASX 200 (TR)",
+    bands: { trackingErrorBps: [0, 250] },
+    kpis: { ytdReturnPct: 4.7, trackingErrorBps: 310 },
+    breaches: [
+      {
+        id: "BR-SS-001",
+        type: "Tracking Error",
+        severity: "Critical",
+        status: "Open",
+        opened: new Date(Date.now() - 2*24*60*60*1000).toISOString(), // 2 days ago
+        note: "TE exceeded +200 bps band vs benchmark."
+      }
+    ]
+  },
+  {
+    id: "M-AU-BOND-QBE-001",
+    client: "QBE Insurance",
+    strategy: "AU Core Bond",
+    benchmark: "Bloomberg AusBond Composite",
+    bands: { issuerConcentrationPct: 8 },
+    kpis: { ytdReturnPct: 2.3 },
+    breaches: [
+      {
+        id: "BR-QBE-002",
+        type: "Concentration",
+        severity: "Medium",
+        status: "Open",
+        opened: new Date(Date.now() - 6*24*60*60*1000).toISOString(), // 6 days ago
+        note: "Single issuer exposure reached alert level."
+      },
+      {
+        id: "BR-QBE-001",
+        type: "Liquidity",
+        severity: "Low",
+        status: "Resolved",
+        opened: new Date(Date.now() - 18*24*60*60*1000).toISOString(),
+        resolved: new Date(Date.now() - 15*24*60*60*1000).toISOString(),
+        note: "Small off-benchmark line hit liquidity tripwire."
+      }
+    ]
+  }
+];
+
+export function getMandates() {
+  return MANDATES;
+}
+
+export function findMandateById(id) {
+  return MANDATES.find(m => m.id === id) || null;
+}
+
+export function getBreaches({ status } = {}) {
+  // Flatten breaches with mandate context
+  const flat = [];
+  for (const m of MANDATES) {
+    for (const b of (m.breaches || [])) {
+      if (status && b.status !== status) continue;
+      flat.push({
+        id: b.id,
+        mandateId: m.id,
+        client: m.client,
+        type: b.type,
+        severity: b.severity,
+        status: b.status,
+        opened: b.opened,
+        resolved: b.resolved || null,
+        note: b.note || ""
+      });
+    }
+  }
+  // newest first
+  flat.sort((a,b) => new Date(b.opened) - new Date(a.opened));
+  return flat;
+}
+2) Replace routes/mandates.js with this version
+This uses the shared store and exposes real breach endpoints.
+
+js
+Copy code
+// routes/mandates.js
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+import { getMandates, findMandateById, getBreaches } from "../lib/mandatesStore.js";
+
+const router = Router();
+
+// List all mandates
+router.get("/", requireAuth, (_req, res) => {
+  res.json(getMandates());
+});
+
+// Breaches (put BEFORE /:id so it isn't shadowed)
+router.get("/breaches", requireAuth, (req, res) => {
+  const status = req.query.status || null; // e.g., ?status=Open
+  res.json(getBreaches({ status }));
+});
+
+router.get("/breaches/open", requireAuth, (_req, res) => {
+  res.json(getBreaches({ status: "Open" }));
+});
+
+// Mandate detail
+router.get("/:id", requireAuth, (req, res) => {
+  const mandate = findMandateById(req.params.id);
+  if (!mandate) return res.status(404).json({ error: "Mandate not found" });
+  res.json(mandate);
+});
+
+export default router;
+3) Update routes/dashboard.js
+3a) Replace your imports at the top with:
+js
+Copy code
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+import { readJson } from "../lib/store.js";
+import { getBreaches } from "../lib/mandatesStore.js";
+3b) In the /metrics handler, compute real breach count
+Find your /metrics route and replace its middle section with this:
+
+js
+Copy code
+// Metrics endpoint
+router.get("/metrics", requireAuth, (_req, res) => {
+  // Approvals
+  const approvals = readJson("approvals.json");
+  const pending = approvals.filter(a => a.status === "Pending").length;
+  const approved = approvals.filter(a => a.status === "Approved").length;
+
+  // AUM (keep aligned with your clients data)
+  const aums = [4200000000, 2850000000]; // SunSuper + QBE
+  const totalAumAud = aums.reduce((a,b)=>a+b, 0);
+  const mtdChangePct = 1.9;
+
+  // REAL breaches last 30 days (Open)
+  const now = Date.now();
+  const d30 = now - 30*24*60*60*1000;
+  const openBreaches = getBreaches({ status: "Open" });
+  const breachesLast30 = openBreaches.filter(b => {
+    const t = new Date(b.opened).getTime();
+    return t >= d30 && t <= now;
+  }).length;
+
+  // Meetings (keep your prior logic)
+  const today = new Date();
+  const in7   = new Date(today.getTime() + 7*24*60*60*1000);
+  const meetings = [
+    { client: "SunSuper",      when: "2025-08-14T02:00:00Z", topic: "Q2 Performance Review" },
+    { client: "QBE Insurance", when: "2025-08-18T01:00:00Z", topic: "LDI Constraint Review" },
+  ].filter(m => {
+    const d = new Date(m.when);
+    return d >= today && d <= in7;
+  });
+
+  res.json({
+    totalAumAud,
+    mtdChangePct,
+    approvals: { pending, approved },
+    breachesLast30,
+    meetings,
+    lastUpdated: new Date().toISOString()
+  });
+});
+3c) Replace your /alerts endpoint to derive from real breaches
+Replace the entire /alerts handler with:
+
+js
+Copy code
+// Alerts derived from real mandate breaches
+router.get("/alerts", requireAuth, (_req, res) => {
+  const open = getBreaches({ status: "Open" });
+  const alerts = open.map(b => {
+    const daysOpen = Math.max(1, Math.ceil((Date.now() - new Date(b.opened).getTime()) / (24*60*60*1000)));
+    return {
+      id: b.id,
+      mandateId: b.mandateId,
+      client: b.client,
+      type: b.type,
+      severity: b.severity,
+      daysOpen,
+      note: b.note || ""
+    };
+  });
+  res.json({ alerts, lastUpdated: new Date().toISOString() });
+});
+You can keep your existing /deadlines endpoint as-is.
