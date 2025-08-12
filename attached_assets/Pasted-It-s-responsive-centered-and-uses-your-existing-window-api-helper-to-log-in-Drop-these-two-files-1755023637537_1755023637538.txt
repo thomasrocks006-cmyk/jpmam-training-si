@@ -1,0 +1,285 @@
+It’s responsive, centered, and uses your existing window.api helper to log in.
+
+Drop these two files into Replit:
+
+A) public/login.html (new page)
+html
+Copy code
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Sign in — JPMAM Training</title>
+    <link rel="stylesheet" href="/reset.css" />
+    <link rel="stylesheet" href="/auth.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body class="auth-body">
+    <main class="auth-wrap">
+      <section class="auth-card" role="form" aria-labelledby="auth-title">
+        <header class="auth-header">
+          <img src="/logo.svg" alt="JPMAM" class="auth-logo" />
+          <h1 id="auth-title" class="auth-title">Sign in</h1>
+          <p class="auth-subtitle">Use your work credentials to continue</p>
+        </header>
+
+        <form id="loginForm" class="auth-form">
+          <div class="field">
+            <label for="email" class="label">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              inputmode="email"
+              autocomplete="email"
+              required
+              class="input"
+              placeholder="you@company.com"
+            />
+          </div>
+
+          <div class="field">
+            <label for="password" class="label">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="input"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary">Sign in</button>
+
+          <!-- This bar keeps 'Forgot password?' and 'Need help?' aligned nicely -->
+          <div class="auth-links" aria-label="Assistance links">
+            <a class="link" href="/forgot.html">Forgot password?</a>
+            <span class="spacer"></span>
+            <a class="link" href="mailto:it-support@yourcompany.com">Need help?</a>
+          </div>
+
+          <p id="authMsg" role="alert" class="auth-msg" hidden></p>
+        </form>
+      </section>
+
+      <footer class="auth-footnote">
+        <p>Authorized access only. Activity may be monitored.</p>
+      </footer>
+    </main>
+
+    <script>
+      (function () {
+        const form = document.getElementById("loginForm");
+        const msg = document.getElementById("authMsg");
+
+        function showMsg(text, type = "error") {
+          msg.textContent = text;
+          msg.className = "auth-msg " + (type === "ok" ? "ok" : "error");
+          msg.hidden = false;
+        }
+
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          msg.hidden = true;
+
+          const payload = {
+            email: form.email.value.trim(),
+            password: form.password.value,
+          };
+
+          // basic front-end validation
+          if (!payload.email || !payload.password) {
+            showMsg("Please enter your email and password.");
+            return;
+          }
+
+          try {
+            const res = await window.api.post("/auth/login", payload);
+            if (res?.token) {
+              window.api.setToken(res.token);
+              showMsg("Signed in. Redirecting…", "ok");
+              // go to dashboard (adjust if your app uses a different path)
+              setTimeout(() => (location.href = "/"), 400);
+            } else {
+              showMsg("Unexpected response from server.");
+            }
+          } catch (err) {
+            showMsg(err.message || "Sign-in failed.");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
+B) public/auth.css (new file)
+css
+Copy code
+/* Layout */
+.auth-body {
+  min-height: 100vh;
+  background: #0b1e2d; /* deep corporate blue */
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-wrap {
+  width: 100%;
+  max-width: 440px;
+}
+
+.auth-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 12px 28px rgba(12, 27, 43, 0.24);
+}
+
+.auth-header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.auth-logo {
+  height: 36px;
+  width: auto;
+  margin: 0 auto 4px;
+}
+
+.auth-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0b1e2d;
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  color: #5b6a79;
+}
+
+/* Form */
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  color: #2a3d50;
+  font-weight: 600;
+}
+
+.input {
+  height: 44px;
+  border: 1px solid #ccd7e0;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 120ms ease;
+  background: #fbfdff;
+}
+
+.input:focus {
+  border-color: #0b6fc2;
+}
+
+/* Button */
+.btn {
+  height: 44px;
+  border-radius: 10px;
+  border: 0;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.btn-primary {
+  background: #0b6fc2;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  filter: brightness(0.95);
+}
+
+/* Links bar — this is the key piece for tidy positioning */
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.auth-links .spacer {
+  flex: 1 1 auto; /* pushes Need help? to the right on wide screens */
+}
+
+.link {
+  color: #0b6fc2;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* Messages */
+.auth-msg {
+  margin-top: 4px;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.auth-msg.error {
+  background: #fff4f4;
+  color: #8b1f1f;
+  border: 1px solid #f3c7c7;
+}
+
+.auth-msg.ok {
+  background: #f2fbf4;
+  color: #156e2f;
+  border: 1px solid #bde3c6;
+}
+
+/* Footnote */
+.auth-footnote {
+  text-align: center;
+  color: #bcd0df;
+  font-size: 12px;
+  margin-top: 14px;
+}
+
+/* Responsive tweaks */
+@media (max-width: 460px) {
+  .auth-card {
+    padding: 22px;
+  }
+  .auth-links {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .auth-links .spacer {
+    display: none; /* stack links on small screens */
+  }
+  .auth-links .link {
+    width: 100%;
+    text-align: center;
+  }
+}
