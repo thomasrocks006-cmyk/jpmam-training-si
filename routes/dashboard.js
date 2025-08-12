@@ -54,4 +54,45 @@ router.get("/activity", requireAuth, (_req, res) => {
   res.json({ feed, lastUpdated: new Date().toISOString() });
 });
 
+// --- NEW: Risk & Compliance alerts (mock) ---
+router.get("/alerts", requireAuth, (_req, res) => {
+  // Tie refs to your mandates IDs so deep-links feel real
+  const alerts = [
+    {
+      id: "BR-SS-001",
+      mandateId: "M-AUS-EQ-SS-001",
+      client: "SunSuper",
+      type: "Tracking Error",
+      severity: "Critical",
+      daysOpen: 2,
+      note: "TE exceeded +200bps band vs benchmark."
+    },
+    {
+      id: "BR-QBE-002",
+      mandateId: "M-AU-BOND-QBE-001",
+      client: "QBE Insurance",
+      type: "Concentration",
+      severity: "Medium",
+      daysOpen: 6,
+      note: "Single issuer exposure reached internal alert level."
+    }
+  ];
+  res.json({ alerts, lastUpdated: new Date().toISOString() });
+});
+
+// --- NEW: Upcoming deadlines & deliverables (mock) ---
+router.get("/deadlines", requireAuth, (_req, res) => {
+  const today = new Date();
+  const addDays = d => new Date(today.getTime() + d*24*60*60*1000).toISOString().slice(0,10);
+
+  const items = [
+    { due: addDays(2),  title: "Q3 Client Pack",      client: "QBE Insurance", owner: "Coverage",   ref: "PK-QBE-Q3" },
+    { due: addDays(4),  title: "RFP – SunSuper Draft",client: "SunSuper",      owner: "You",        ref: "RFP-SS-24Q3" },
+    { due: addDays(7),  title: "Risk: VaR & TE Run",  client: "SunSuper",      owner: "Risk Ops",   ref: "RISK-VaR-TE" },
+    { due: addDays(10), title: "Compliance Attest.",  client: "All Mandates",  owner: "Compliance", ref: "COMP-QTR" }
+  ].sort((a,b)=> a.due.localeCompare(b.due));
+
+  res.json({ items, lastUpdated: new Date().toISOString() });
+});
+
 export default router;

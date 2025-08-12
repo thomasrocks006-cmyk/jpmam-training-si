@@ -377,6 +377,11 @@ function topNav() {
     openApprovalsPending();
   };
 
+  // --- NEW: Brand/Title as Back to Dashboard link ---
+  const brand = el.querySelector(".brand");
+  brand.style.cursor = "pointer";
+  brand.onclick = () => { state.view = "dashboard"; render(); };
+
   return el;
 }
 
@@ -649,164 +654,130 @@ function DashboardMain() {
   drawRows();
   state.pendingOnly = false;
 
-  // === NEW: At-a-Glance + Market + Recent Activity ===
+  // === NEW: At-a-Glance + Market + Recent Activity + Alerts/Deadlines/Performance ===
   (async () => {
     try {
-      // Fetching metrics, activity, and market data is assumed to be handled by existing or new functions.
-      // For now, we'll create placeholder elements and structure.
-      // In a real scenario, you'd call fetchDashboardMetrics(), fetchActivity(), fetchMarket()
-      // and use buildMetricsRow(), buildActivityFeed(), buildMarketSnapshot()
+      const metrics = await fetchDashboardMetrics(); // Assuming this exists or will be added
+      const activity = await fetchActivity(); // Assuming this exists or will be added
+      const market = await fetchMarketSnapshot(); // Assuming this exists or will be added
 
-      const mainContentDiv = document.createElement("div");
-      mainContentDiv.className = "main"; // This className is from the original thought process
-      wrap.appendChild(mainContentDiv); // Append to the main layout wrap
+      const row = buildMetricsRow(metrics); // Assuming this exists or will be added
+      const activityCard = buildActivityFeed(activity); // Assuming this exists or will be added
+      const marketCard = buildMarketSnapshot(market); // Assuming this exists or will be added
+      const alertsCard = buildAlertsCard(await fetchDashboardAlerts());
+      const deadlinesCard = buildDeadlinesCard(await fetchDashboardDeadlines());
+      const perfCard = await buildPerformanceCard();
 
-      const metricsRow = document.createElement("div"); // Placeholder for metrics row
-      metricsRow.className = "metrics-row grid-4"; // Using classes from the provided CSS
-
-      const activityCard = document.createElement("div"); // Placeholder for activity card
-      activityCard.className = "card activity-feed";
-      activityCard.innerHTML = `
-        <div class="p">
-          <h3>Client & Portfolio Activity</h3>
-          <ul>
-            <li>Client meeting set: SunSuper (Performance Review) · MEET-SUSU</li>
-            <li>RFP draft uploaded for QBE Insurance LDI · RFP-QBE</li>
-            <li>Quarterly factsheet generated: Aus Core Bond · FS-ACB</li>
-            <li>Mandate change request: Real Assets tilt · MCR-RA</li>
-          </ul>
-        </div>
-      `;
-
-      const marketCard = document.createElement("div"); // Placeholder for market snapshot
-      marketCard.className = "card";
-      marketCard.innerHTML = `
-        <div class="p">
-          <h3>Market Snapshot</h3>
-          <div class="market-grid">
-            <div class="mkt-item">
-              <small class="muted">ASX 200</small>
-              <div class="mkt-val neg">-0.34%</div>
-            </div>
-            <div class="mkt-item">
-              <small class="muted">AUD/USD</small>
-              <div class="mkt-val pos">0.67</div>
-              <div class="mkt-val pos">+0.12%</div>
-            </div>
-            <div class="mkt-item">
-              <small class="muted">S&P 500</small>
-              <div class="mkt-val pos">+0.28%</div>
-            </div>
-          </div>
-          <small class="muted">Last updated: ${new Date().toLocaleTimeString()}</small>
-        </div>
-      `;
-
-      // Constructing the new grid layout
-      const dashboardGrid = document.createElement("div");
-      dashboardGrid.className = "dashboard-grid";
-
+      const grid = document.createElement("div");
+      grid.className = "dashboard-grid";
       const col1 = document.createElement("div");
-      // Add placeholder content for metrics if no actual fetch/build functions are available yet
-      const placeholderMetrics = document.createElement("div");
-      placeholderMetrics.className = "metrics-row grid-4";
-      placeholderMetrics.innerHTML = `
-        <div class="card metric-tile"><div class="p">
-          <small class="muted">AUM (Australia)</small>
-          <h2 class="metric-val">A$128.4bn</h2>
-          <small class="muted">+ A$320m net flows today</small>
-        </div></div>
-        <div class="card metric-tile"><div class="p">
-          <small class="muted">Active Mandates</small>
-          <h2 class="metric-val">84</h2>
-          <small class="muted">12 in transition</small>
-        </div></div>
-        <div class="card metric-tile"><div class="p">
-          <small class="muted">Trade Exceptions</small>
-          <h2 class="metric-val">5</h2>
-          <small class="muted">2 require action</small>
-        </div></div>
-        <div class="card metric-tile"><div class="p">
-          <small class="muted">Compliance Attestations</small>
-          <h2 class="metric-val">2 due</h2>
-          <small class="muted">Quarterly certifications</small>
-        </div></div>
-      `;
-      col1.appendChild(placeholderMetrics);
-      col1.appendChild(marketCard);
-
       const col2 = document.createElement("div");
-      col2.appendChild(activityCard);
-
       const col3 = document.createElement("div");
-      col3.id = "mount-approvals"; // Anchor for approvals
-      col3.style.marginBottom = "16px"; // Add some spacing
 
-      const mandatesCard = document.createElement("div");
-      mandatesCard.className = "card";
-      mandatesCard.innerHTML = `
-        <div class="p">
-          <div class="flex-between">
-            <h3>Mandates</h3>
-            <button class="btn" onclick="setState({ view: 'mandates' })">View All →</button>
-          </div>
-          <ul>
-            <li>SunSuper — Australian Equity Core <span class="muted">(A$4.2bn)</span></li>
-            <li>QBE Insurance — LDI / Fixed Income <span class="muted">(A$2.85bn)</span></li>
-            <li>Pacific Rail Pension — Real Assets <span class="muted">(Pipeline)</span></li>
-          </ul>
-        </div>
-      `;
-      col3.appendChild(mandatesCard);
-      
-      const placeholderApprovals = document.createElement("div");
-      placeholderApprovals.className = "card";
-      placeholderApprovals.innerHTML = `
-        <div class="p">
-          <div class="flex-between">
-            <h3>Approvals</h3>
-            <div class="row">
-              <select class="input" style="width:auto;">
-                <option>All</option><option>Pending</option><option>Approved</option><option>Escalated</option>
-              </select>
-              <button class="btn">View All →</button>
-            </div>
-          </div>
-          <div style="overflow:auto;">
-            <table class="table" id="approvalsTable">
-              <thead><tr>
-                <th>ID</th><th>Requester</th><th>Dept</th><th>Amount</th><th>Status</th><th>Submitted</th><th></th>
-              </tr></thead>
-              <tbody>
-                <tr>
-                  <td>APP-001</td><td>Alice Smith</td><td>Investments</td><td>A$1.5m</td><td>${statusPill('Pending')}</td><td>2024-07-29</td>
-                  <td style="text-align:right;">
-                    <button class="btn">Quick Approve</button><button class="btn">Open</button>
-                  </td>
-                </tr>
-                <tr>
-                  <td>APP-002</td><td>Bob Johnson</td><td>Trading</td><td>A$500k</td><td>${statusPill('Approved')}</td><td>2024-07-28</td>
-                  <td style="text-align:right;">
-                    <button class="btn">Quick Approve</button><button class="btn">Open</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-      col3.appendChild(placeholderApprovals);
+      // Column 1
+      col1.appendChild(row);
+      col1.appendChild(marketCard);
+      col1.appendChild(alertsCard);
 
-      // Mount placeholders into the new grid structure
-      dashboardGrid.appendChild(col1);
-      dashboardGrid.appendChild(col2);
-      dashboardGrid.appendChild(col3);
-      mainContentDiv.appendChild(dashboardGrid);
+      // Column 2
+      col2.appendChild(activityCard);
+      col2.appendChild(deadlinesCard);
 
+      // Column 3 (existing cards go here)
+      const approvalsMount = document.createElement("div"); approvalsMount.id = "mount-approvals";
+      const mandatesMount  = document.createElement("div"); mandatesMount.id  = "mount-mandates";
+      col3.appendChild(approvalsMount);
+      col3.appendChild(mandatesMount);
+      col3.appendChild(perfCard);
+
+      grid.appendChild(col1);
+      grid.appendChild(col2);
+      grid.appendChild(col3);
+      main.appendChild(grid);
     } catch (e) {
       console.error("Dashboard enhancements failed", e);
     }
   })();
+
+  // Placeholder functions for dependencies if they don't exist yet
+  // In a real scenario, these would fetch actual data
+  async function fetchDashboardMetrics() { return {}; }
+  async function fetchActivity() { return []; }
+  async function fetchMarketSnapshot() { return {}; }
+  function buildMetricsRow(metrics) {
+    const card = document.createElement("div");
+    card.className = "metrics-row grid-4";
+    card.innerHTML = `
+      <div class="card metric-tile"><div class="p">
+        <small class="muted">AUM (Australia)</small>
+        <h2 class="metric-val">A$128.4bn</h2>
+        <small class="muted">+ A$320m net flows today</small>
+      </div></div>
+      <div class="card metric-tile"><div class="p">
+        <small class="muted">Active Mandates</small>
+        <h2 class="metric-val">84</h2>
+        <small class="muted">12 in transition</small>
+      </div></div>
+      <div class="card metric-tile"><div class="p">
+        <small class="muted">Trade Exceptions</small>
+        <h2 class="metric-val">5</h2>
+        <small class="muted">2 require action</small>
+      </div></div>
+      <div class="card metric-tile"><div class="p">
+        <small class="muted">Compliance Attestations</small>
+        <h2 class="metric-val">2 due</h2>
+        <small class="muted">Quarterly certifications</small>
+      </div></div>
+    `;
+    return card;
+  }
+  function buildActivityFeed(activity) {
+    const card = document.createElement("div");
+    card.className = "card activity-feed";
+    card.innerHTML = `
+      <div class="p">
+        <h3>Client & Portfolio Activity</h3>
+        <ul>
+          <li>Client meeting set: SunSuper (Performance Review) · MEET-SUSU</li>
+          <li>RFP draft uploaded for QBE Insurance LDI · RFP-QBE</li>
+          <li>Quarterly factsheet generated: Aus Core Bond · FS-ACB</li>
+          <li>Mandate change request: Real Assets tilt · MCR-RA</li>
+        </ul>
+      </div>
+    `;
+    return card;
+  }
+  function buildMarketSnapshot(market) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="p">
+        <h3>Market Snapshot</h3>
+        <div class="market-grid">
+          <div class="mkt-item">
+            <small class="muted">ASX 200</small>
+            <div class="mkt-val neg">-0.34%</div>
+          </div>
+          <div class="mkt-item">
+            <small class="muted">AUD/USD</small>
+            <div class="mkt-val pos">0.67</div>
+            <div class="mkt-val pos">+0.12%</div>
+          </div>
+          <div class="mkt-item">
+            <small class="muted">S&P 500</small>
+            <div class="mkt-val pos">+0.28%</div>
+          </div>
+        </div>
+        <small class="muted">Last updated: ${new Date().toLocaleTimeString()}</small>
+      </div>
+    `;
+    return card;
+  }
+
+
+  // Original content below, appended after the new grid structure is added
+
+  // --- Original content starts here ---
 
   // Client & Portfolio Activity (simple) - Moved inside the async IIFE for structure
   // const activity = document.createElement("div");

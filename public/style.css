@@ -144,3 +144,16 @@ ul li { margin: 6px 0; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .metrics-row.grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
 }
+
+/* === Dashboard (new cards) === */
+.alerts-list { display: flex; flex-direction: column; gap: 10px; }
+.alert-row { border-top: 1px dashed var(--line); padding: 8px 0; display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.alert-row:first-child { border-top: 0; }
+.alert-main { display: flex; align-items: center; gap: 8px; }
+.badge.critical { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.badge.medium   { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.badge.low      { background: #ecfeff; color: #155e75; border: 1px solid #a5f3fc; }
+
+.spark-cell svg { display: block; }
+.spark-cell { color: #4b5563; } /* stroke color via currentColor */
+.brand { user-select: none; }    /* pairs with cursor pointer in JS */
