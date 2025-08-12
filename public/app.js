@@ -654,56 +654,98 @@ function DashboardMain() {
   drawRows();
   state.pendingOnly = false;
 
-  // === NEW: At-a-Glance + Market + Recent Activity + Alerts/Deadlines/Performance ===
-  (async () => {
-    try {
-      const metrics = await fetchDashboardMetrics(); // Assuming this exists or will be added
-      const activity = await fetchActivity(); // Assuming this exists or will be added
-      const market = await fetchMarketSnapshot(); // Assuming this exists or will be added
+  // === Dashboard enhancement functions ===
+  async function fetchDashboardMetrics() { 
+    return {
+      aum: 128.4e9,
+      mandates: 84,
+      exceptions: 5,
+      attestations: 2
+    }; 
+  }
+  
+  async function fetchActivity() { 
+    return [
+      { type: 'meeting', text: 'Client meeting set: SunSuper (Performance Review)', id: 'MEET-SUSU' },
+      { type: 'rfp', text: 'RFP draft uploaded for QBE Insurance LDI', id: 'RFP-QBE' },
+      { type: 'report', text: 'Quarterly factsheet generated: Aus Core Bond', id: 'FS-ACB' },
+      { type: 'mandate', text: 'Mandate change request: Real Assets tilt', id: 'MCR-RA' }
+    ]; 
+  }
+  
+  async function fetchMarketSnapshot() { 
+    return {
+      asx200: -0.34,
+      audUsd: { rate: 0.67, change: 0.12 },
+      sp500: 0.28
+    }; 
+  }
 
-      const row = buildMetricsRow(metrics); // Assuming this exists or will be added
-      const activityCard = buildActivityFeed(activity); // Assuming this exists or will be added
-      const marketCard = buildMarketSnapshot(market); // Assuming this exists or will be added
-      const alertsCard = buildAlertsCard(await fetchDashboardAlerts());
-      const deadlinesCard = buildDeadlinesCard(await fetchDashboardDeadlines());
-      const perfCard = await buildPerformanceCard();
+  async function fetchDashboardAlerts() {
+    return [
+      { id: 1, severity: 'medium', text: 'Compliance deadline approaching', type: 'compliance' },
+      { id: 2, severity: 'low', text: '3 informational notices from Security Center', type: 'security' }
+    ];
+  }
 
-      const grid = document.createElement("div");
-      grid.className = "dashboard-grid";
-      const col1 = document.createElement("div");
-      const col2 = document.createElement("div");
-      const col3 = document.createElement("div");
+  async function fetchDashboardDeadlines() {
+    return [
+      { task: 'SunSuper — Upload Q2 performance deck', owner: 'You', due: 'Fri' },
+      { task: 'QBE Insurance — Confirm fee schedule redlines', owner: 'Legal', due: 'Wed' },
+      { task: 'SunSuper — SLA report sign-off', owner: 'Reporting', due: 'Mon' }
+    ];
+  }
 
-      // Column 1
-      col1.appendChild(row);
-      col1.appendChild(marketCard);
-      col1.appendChild(alertsCard);
+  function buildAlertsCard(alerts) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="p">
+        <h3>Alerts</h3>
+        ${alerts.length ? alerts.map(a => `
+          <div class="alert-row">
+            <div class="alert-main">
+              <span class="badge ${a.severity}">${a.severity.toUpperCase()}</span>
+              ${a.text}
+            </div>
+          </div>
+        `).join('') : '<p class="muted">No critical alerts.</p>'}
+      </div>
+    `;
+    return card;
+  }
 
-      // Column 2
-      col2.appendChild(activityCard);
-      col2.appendChild(deadlinesCard);
+  function buildDeadlinesCard(deadlines) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="p">
+        <h3>Client Tasks</h3>
+        <ul>
+          ${deadlines.map(d => `
+            <li>${d.task} <span class="muted">(owner: ${d.owner} · due ${d.due})</span></li>
+          `).join('')}
+        </ul>
+      </div>
+    `;
+    return card;
+  }
 
-      // Column 3 (existing cards go here)
-      const approvalsMount = document.createElement("div"); approvalsMount.id = "mount-approvals";
-      const mandatesMount  = document.createElement("div"); mandatesMount.id  = "mount-mandates";
-      col3.appendChild(approvalsMount);
-      col3.appendChild(mandatesMount);
-      col3.appendChild(perfCard);
-
-      grid.appendChild(col1);
-      grid.appendChild(col2);
-      grid.appendChild(col3);
-      main.appendChild(grid);
-    } catch (e) {
-      console.error("Dashboard enhancements failed", e);
-    }
-  })();
-
-  // Placeholder functions for dependencies if they don't exist yet
-  // In a real scenario, these would fetch actual data
-  async function fetchDashboardMetrics() { return {}; }
-  async function fetchActivity() { return []; }
-  async function fetchMarketSnapshot() { return {}; }
+  async function buildPerformanceCard() {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="p">
+        <h3>Performance Snapshot</h3>
+        <ul>
+          <li>Aus Core Bond vs AusBond Composite — <strong>+62 bps (1Y)</strong></li>
+          <li>Australian Equity Core vs S&P/ASX 200 — <strong>+48 bps (3Y ann.)</strong></li>
+          <li>Real Assets Income — <strong>+5.1% (YTD)</strong></li>
+        </ul>
+      </div>
+    `;
+    return card;
+  }
   function buildMetricsRow(metrics) {
     const card = document.createElement("div");
     card.className = "metrics-row grid-4";
@@ -731,6 +773,7 @@ function DashboardMain() {
     `;
     return card;
   }
+  
   function buildActivityFeed(activity) {
     const card = document.createElement("div");
     card.className = "card activity-feed";
@@ -738,15 +781,13 @@ function DashboardMain() {
       <div class="p">
         <h3>Client & Portfolio Activity</h3>
         <ul>
-          <li>Client meeting set: SunSuper (Performance Review) · MEET-SUSU</li>
-          <li>RFP draft uploaded for QBE Insurance LDI · RFP-QBE</li>
-          <li>Quarterly factsheet generated: Aus Core Bond · FS-ACB</li>
-          <li>Mandate change request: Real Assets tilt · MCR-RA</li>
+          ${activity.map(a => `<li>${a.text} · ${a.id}</li>`).join('')}
         </ul>
       </div>
     `;
     return card;
   }
+  
   function buildMarketSnapshot(market) {
     const card = document.createElement("div");
     card.className = "card";
@@ -756,16 +797,16 @@ function DashboardMain() {
         <div class="market-grid">
           <div class="mkt-item">
             <small class="muted">ASX 200</small>
-            <div class="mkt-val neg">-0.34%</div>
+            <div class="mkt-val ${market.asx200 >= 0 ? 'pos' : 'neg'}">${market.asx200 >= 0 ? '+' : ''}${market.asx200}%</div>
           </div>
           <div class="mkt-item">
             <small class="muted">AUD/USD</small>
-            <div class="mkt-val pos">0.67</div>
-            <div class="mkt-val pos">+0.12%</div>
+            <div class="mkt-val pos">${market.audUsd.rate}</div>
+            <div class="mkt-val pos">+${market.audUsd.change}%</div>
           </div>
           <div class="mkt-item">
             <small class="muted">S&P 500</small>
-            <div class="mkt-val pos">+0.28%</div>
+            <div class="mkt-val pos">+${market.sp500}%</div>
           </div>
         </div>
         <small class="muted">Last updated: ${new Date().toLocaleTimeString()}</small>
@@ -773,6 +814,50 @@ function DashboardMain() {
     `;
     return card;
   }
+
+  // === NEW: Enhanced Dashboard Layout ===
+  (async () => {
+    try {
+      const metrics = await fetchDashboardMetrics();
+      const activity = await fetchActivity();
+      const market = await fetchMarketSnapshot();
+      const alerts = await fetchDashboardAlerts();
+      const deadlines = await fetchDashboardDeadlines();
+
+      const row = buildMetricsRow(metrics);
+      const activityCard = buildActivityFeed(activity);
+      const marketCard = buildMarketSnapshot(market);
+      const alertsCard = buildAlertsCard(alerts);
+      const deadlinesCard = buildDeadlinesCard(deadlines);
+      const perfCard = await buildPerformanceCard();
+
+      const grid = document.createElement("div");
+      grid.className = "dashboard-grid";
+      const col1 = document.createElement("div");
+      const col2 = document.createElement("div");
+      const col3 = document.createElement("div");
+
+      // Column 1: Metrics + Market + Alerts
+      col1.appendChild(row);
+      col1.appendChild(marketCard);
+      col1.appendChild(alertsCard);
+
+      // Column 2: Activity + Deadlines
+      col2.appendChild(activityCard);
+      col2.appendChild(deadlinesCard);
+
+      // Column 3: Performance
+      col3.appendChild(perfCard);
+
+      grid.appendChild(col1);
+      grid.appendChild(col2);
+      grid.appendChild(col3);
+      main.appendChild(grid);
+    } catch (e) {
+      console.error("Dashboard enhancements failed", e);
+      // Fallback - just show the basic content that was already working
+    }
+  })();
 
   // Original content below, appended after the new grid structure is added
 
