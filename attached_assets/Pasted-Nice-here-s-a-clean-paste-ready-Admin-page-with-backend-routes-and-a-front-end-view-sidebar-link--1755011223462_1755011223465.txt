@@ -1,0 +1,378 @@
+Nice—here’s a clean, paste-ready Admin page with backend routes and a front-end view + sidebar link. It gives you:
+
+Users (read from data/users.json, password stripped)
+
+Feature Flags (in-memory toggles)
+
+Audit Log (in-memory, records flag changes)
+
+System Health (uptime, version, env)
+
+Everything below is additive and safe to paste.
+
+1) Backend — create routes/admin.js
+Create routes/admin.js:
+
+js
+Copy code
+// routes/admin.js
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+import { readJson, writeJson } from "../lib/store.js";
+
+const router = Router();
+
+// --- simple "uptime since boot" ---
+const BOOTED_AT = Date.now();
+
+// --- in-memory feature flags & audit log (resets on restart) ---
+const FLAGS = {
+  liveActivity: true,
+  demoData: true,
+  autoRefresh: true,
+};
+
+const AUDIT = [
+  { id: "A-0001", ts: new Date().toISOString(), actor: "system", action: "boot", detail: "Server started" },
+];
+
+// --- helpers ---
+function redactUsers(list = []) {
+  return list.map(u => {
+    const { password, ...safe } = u;
+    return safe;
+  });
+}
+function log(actor, action, detail) {
+  AUDIT.unshift({
+    id: "A-" + String(1000 + AUDIT.length),
+    ts: new Date().toISOString(),
+    actor,
+    action,
+    detail,
+  });
+}
+
+// --- health ---
+router.get("/health", requireAuth, (_req, res) => {
+  res.json({
+    status: "ok",
+    bootedAt: new Date(BOOTED_AT).toISOString(),
+    uptimeSec: Math.floor((Date.now() - BOOTED_AT) / 1000),
+    version: "1.0.0-admin",
+    node: process.version,
+    env: {
+      NODE_ENV: process.env.NODE_ENV || "development",
+      PORT: process.env.PORT || 4000,
+    },
+    lastUpdated: new Date().toISOString(),
+  });
+});
+
+// --- users (read + simple role update) ---
+router.get("/users", requireAuth, (_req, res) => {
+  const users = readJson("users.json");
+  res.json({ users: redactUsers(users), lastUpdated: new Date().toISOString() });
+});
+
+router.put("/users/:email/role", requireAuth, (req, res) => {
+  const email = decodeURIComponent(req.params.email || "").toLowerCase();
+  const { role } = req.body || {};
+  if (!role) return res.status(400).json({ error: "Missing 'role' in body" });
+
+  const users = readJson("users.json");
+  const idx = users.findIndex(u => (u.email || "").toLowerCase() === email);
+  if (idx === -1) return res.status(404).json({ error: "User not found" });
+
+  users[idx].role = String(role);
+  writeJson("users.json", users);
+
+  log(req.user?.sub || "unknown", "user.role.update", `${email} -> ${role}`);
+  const { password, ...safe } = users[idx];
+  res.json({ user: safe, ok: true });
+});
+
+// --- feature flags ---
+router.get("/flags", requireAuth, (_req, res) => {
+  res.json({ flags: FLAGS, lastUpdated: new Date().toISOString() });
+});
+
+router.put("/flags", requireAuth, (req, res) => {
+  const updates = req.body || {};
+  Object.keys(updates).forEach(k => {
+    if (Object.prototype.hasOwnProperty.call(FLAGS, k)) {
+      FLAGS[k] = Boolean(updates[k]);
+      log(req.user?.sub || "unknown", "flag.update", `${k}=${FLAGS[k]}`);
+    }
+  });
+  res.json({ flags: FLAGS });
+});
+
+// --- audit log ---
+router.get("/audit", requireAuth, (_req, res) => {
+  res.json({ audit: AUDIT.slice(0, 200), lastUpdated: new Date().toISOString() });
+});
+
+export default router;
+2) Backend — mount the admin routes
+Open server.js and add the import with the other routes:
+
+js
+Copy code
+import adminRoutes from "./routes/admin.js";
+Then mount it with the others:
+
+js
+Copy code
+app.use("/api/admin", adminRoutes);
+Restart your server after saving.
+
+3) Frontend — add Admin view + API helpers
+Open public/app.js.
+
+3a) Add API helpers (near your other apiGet helpers)
+js
+Copy code
+// === Admin API helpers ===
+async function adminGetHealth(){ return await apiGet("/admin/health"); }
+async function adminGetUsers(){ return await apiGet("/admin/users"); }
+async function adminSetUserRole(email, role){
+  return await apiFetch(`/admin/users/${encodeURIComponent(email)}/role`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role })
+  });
+}
+async function adminGetFlags(){ return await apiGet("/admin/flags"); }
+async function adminSetFlags(partial){
+  return await apiFetch("/admin/flags", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(partial || {})
+  });
+}
+async function adminGetAudit(){ return await apiGet("/admin/audit"); }
+3b) Add the Admin view component
+Paste this near your other View* functions:
+
+js
+Copy code
+function ViewAdmin(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  // Sidebar
+  wrap.appendChild(sidebar());
+
+  // Main
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Admin</h2>
+        <small class="muted">Manage users, flags, logs & health</small>
+      </div>
+      <div class="tabs" id="tabs">
+        <div class="tab active" data-tab="users">Users</div>
+        <div class="tab" data-tab="flags">Feature Flags</div>
+        <div class="tab" data-tab="audit">Audit Log</div>
+        <div class="tab" data-tab="health">System Health</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const tabs = card.querySelector("#tabs");
+  const body = card.querySelector("#body");
+
+  async function showUsers(){
+    body.innerHTML = `<div class="muted">Loading users…</div>`;
+    try {
+      const { users=[] } = await adminGetUsers();
+      body.innerHTML = `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th style="width:160px;"></th></tr></thead>
+          <tbody>
+            ${users.map(u => `
+              <tr>
+                <td>${u.name || "-"}</td>
+                <td>${u.email || "-"}</td>
+                <td>${u.role || "Analyst"}</td>
+                <td>
+                  <div class="inline">
+                    <select data-email="${u.email}">
+                      ${["Analyst","Coverage","Risk","Admin"].map(r => `<option ${r===(u.role||"Analyst")?"selected":""}>${r}</option>`).join("")}
+                    </select>
+                    <button class="btn" data-action="set-role" data-email="${u.email}">Save</button>
+                  </div>
+                </td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+      body.querySelector("tbody").addEventListener("click", async (e) => {
+        if (e.target?.dataset?.action === "set-role"){
+          const email = e.target.dataset.email;
+          const sel = body.querySelector(`select[data-email="${CSS.escape(email)}"]`);
+          const role = sel?.value;
+          e.target.disabled = true;
+          try {
+            await adminSetUserRole(email, role);
+            toast("Saved");
+          } catch(err){
+            alert(err.message || "Failed to update role");
+          } finally {
+            e.target.disabled = false;
+          }
+        }
+      });
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function showFlags(){
+    body.innerHTML = `<div class="muted">Loading flags…</div>`;
+    try {
+      const { flags={} } = await adminGetFlags();
+      body.innerHTML = `
+        <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
+          ${Object.keys(flags).map(k => `
+            <div class="card" style="border:1px solid var(--line);">
+              <div class="p">
+                <div class="flex-between">
+                  <b>${k}</b>
+                  <label class="switch">
+                    <input type="checkbox" data-flag="${k}" ${flags[k] ? "checked": ""}/>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+                <small class="muted">Toggle ${k}</small>
+              </div>
+            </div>`).join("")}
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn" id="saveFlags">Save Changes</button>
+        </div>
+      `;
+      body.querySelector("#saveFlags").onclick = async () => {
+        const inputs = body.querySelectorAll("input[data-flag]");
+        const payload = {};
+        inputs.forEach(i => payload[i.dataset.flag] = i.checked);
+        try {
+          await adminSetFlags(payload);
+          toast("Flags updated");
+        } catch(e){ alert(e.message || "Failed to update flags"); }
+      };
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function showAudit(){
+    body.innerHTML = `<div class="muted">Loading audit…</div>`;
+    try {
+      const { audit=[] } = await adminGetAudit();
+      body.innerHTML = `
+        <table class="table">
+          <thead><tr><th style="width:110px;">ID</th><th style="width:160px;">Time</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
+          <tbody>
+            ${audit.map(a => `
+              <tr>
+                <td>${a.id}</td>
+                <td>${new Date(a.ts).toLocaleString()}</td>
+                <td>${a.actor}</td>
+                <td>${a.action}</td>
+                <td>${a.detail || ""}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function showHealth(){
+    body.innerHTML = `<div class="muted">Loading health…</div>`;
+    try {
+      const h = await adminGetHealth();
+      body.innerHTML = `
+        <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px;">
+          <div class="card"><div class="p"><b>Status</b><div>${h.status}</div></div></div>
+          <div class="card"><div class="p"><b>Uptime</b><div>${h.uptimeSec}s</div></div></div>
+          <div class="card"><div class="p"><b>Booted</b><div>${new Date(h.bootedAt).toLocaleString()}</div></div></div>
+          <div class="card"><div class="p"><b>Version</b><div>${h.version}</div></div></div>
+          <div class="card"><div class="p"><b>Node</b><div>${h.node}</div></div></div>
+          <div class="card"><div class="p"><b>Env</b><div>PORT=${h.env.PORT} / NODE_ENV=${h.env.NODE_ENV}</div></div></div>
+        </div>
+      `;
+    } catch(e){
+      body.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  }
+
+  async function setTab(name){
+    tabs.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    tabs.querySelector(`.tab[data-tab="${name}"]`)?.classList.add("active");
+    if (name === "users") return showUsers();
+    if (name === "flags") return showFlags();
+    if (name === "audit") return showAudit();
+    if (name === "health") return showHealth();
+  }
+
+  tabs.addEventListener("click", (e) => {
+    const el = e.target.closest(".tab");
+    if (!el) return;
+    setTab(el.dataset.tab);
+  });
+
+  setTab("users");
+  return root;
+}
+Uses your topNav() + sidebar() + basic table/cards, so it matches your app’s style.
+
+3c) Add navigation to Admin from the sidebar
+Find your sidebar() function and add a nav item for Admin alongside Clients/Mandates. For example, where you append other links, add:
+
+js
+Copy code
+// Admin link
+const adminLink = document.createElement("div");
+adminLink.className = "navlink";
+adminLink.textContent = "Admin";
+adminLink.onclick = () => { state.view = "admin"; render(); };
+side.appendChild(adminLink);
+3d) Register the new view in your router switch
+Near the bottom where you switch on state.view (e.g., if (state.view === "dashboard") ...), add:
+
+js
+Copy code
+else if (state.view === "admin") view = ViewAdmin();
+4) Frontend CSS (optional polish)
+Append to public/style.css:
+
+css
+Copy code
+/* Admin switches */
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: #e5e7eb; transition: .2s; border-radius: 999px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; top: 3px; background: white; transition: .2s; border-radius: 999px; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+.switch input:checked + .slider { background: #10b981; }
+.switch input:checked + .slider:before { transform: translateX(16px); }
+
+/* Sidebar navlink (if needed) */
+.navlink { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.navlink:hover { background: #f3f4f6; }

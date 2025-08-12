@@ -43,7 +43,7 @@
     "requester": "Client Coverage",
     "dept": "Institutional",
     "amount": 0,
-    "status": "Pending",
+    "status": "Approved",
     "submitted": "2025-08-06",
     "docs": [
       {
@@ -63,6 +63,12 @@
         "user": "coverage.apac@jpmorgan.com",
         "action": "Submitted",
         "meta": "Mandate guideline update"
+      },
+      {
+        "ts": "2025-08-12T14:51:45.254Z",
+        "user": "thomas.francis@jpmorgan.com",
+        "action": "Approved",
+        "meta": "Approved via API"
       }
     ]
   }
