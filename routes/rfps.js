@@ -3,7 +3,7 @@ import { Router } from "express";
 import { requireAuth } from "../lib/auth.js";
 import { readJson, writeJson } from "../lib/store.js";
 import { auditLog } from "../lib/audit.js";
-import { emitDash } from "../lib/sse.js"; // Assuming SSE emitter is in lib/sse.js
+import { emitDash } from "../lib/events.js";
 
 const router = Router();
 const FILE = "rfps.json";
