@@ -1,1 +1,34 @@
+[
+  {
+    "id": "AM-52731",
+    "requester": "PM Desk",
+    "dept": "Equities",
+    "amount": 18500000,
+    "status": "Pending",
+    "submitted": "2025-08-07",
+    "docs": [
+      { "name": "Trade-exception-TE-9271.pdf", "type": "PDF", "size": "184 KB" },
+      { "name": "Block-trade-details.xlsx", "type": "XLSX", "size": "92 KB" }
+    ],
+    "audit": [
+      { "ts": "2025-08-07T10:12:03+10:00", "user": "thomas.francis@jpmorgan.com", "action": "Created", "meta": "Desk: AUS AM — Origin: JPMorgan Asset Management (Training)" },
+      { "ts": "2025-08-07T10:45:10+10:00", "user": "pm.equities@jpmorgan.com", "action": "Submitted" }
+    ]
+  },
+  {
+    "id": "AM-52712",
+    "requester": "Client Coverage",
+    "dept": "Institutional",
+    "amount": 0,
+    "status": "Pending",
+    "submitted": "2025-08-06",
+    "docs": [
+      { "name": "SAA-change-request-SunSuper.pdf", "type": "PDF", "size": "256 KB" },
+      { "name": "SAA-scenarios.xlsx", "type": "XLSX", "size": "121 KB" }
+    ],
+    "audit": [
+      { "ts": "2025-08-06T08:05:22+10:00", "user": "coverage.apac@jpmorgan.com", "action": "Submitted", "meta": "Mandate guideline update" }
+    ]
+  }
+]
 

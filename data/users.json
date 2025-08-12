@@ -1,1 +1,18 @@
+[
+  {
+    "email": "thomas.francis@jpmorgan.com",
+    "password": "Englandstrong1",
+    "name": "Thomas Francis",
+    "dob": "1996-03-05",
+    "sex": "Male",
+    "role": "Equity Analyst",
+    "department": "Asset Management – Equities (AU)",
+    "employeeId": "AUS-014372",
+    "manager": "S. Patel",
+    "office": "Melbourne",
+    "phone": "+61 3 5550 1200",
+    "mfaDevices": ["Authenticator App", "SMS Backup"],
+    "startDate": "2022-07-18"
+  }
+]
 
