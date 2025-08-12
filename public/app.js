@@ -1222,9 +1222,30 @@ function ViewClientDetail() {
   }
   function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+// === Mandates API ===
+async function mandatesList(){ return await api("/mandates"); }
+async function mandateGet(id){ return await api(`/mandates/${encodeURIComponent(id)}`); }
+async function mandateCreate(payload){
+  return await api("/mandates", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+}
+async function mandateUpdate(id, payload){
+  return await api(`/mandates/${encodeURIComponent(id)}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+}
+async function mandateDelete(id){
+  return await api(`/mandates/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+async function mandateBreaches(id){
+  return await api(`/mandates/${encodeURIComponent(id)}/breaches`);
+}
+async function mandatePatchBreach(id, breachId, payload){
+  return await api(`/mandates/${encodeURIComponent(id)}/breaches/${encodeURIComponent(breachId)}`, {
+    method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)
+  });
+}
+
 // === Mandate Breaches helpers ===
 async function fetchMandateDetail(id){
-  return await api(`/mandates/${encodeURIComponent(id)}`);
+  return await mandateGet(id);
 }
 
 function buildBreachesPanel(mandate){
@@ -1459,33 +1480,38 @@ function ViewMandates() {
   const tbody = card.querySelector("tbody");
   const q = card.querySelector("#q");
 
+  function renderMandatesTable(rows){
+    return rows.map(r => {
+      const id = r.id || "-";
+      const client = r.client || "-";
+      const strategy = r.strategy || "-";
+      const aum = r.aumAud != null ? formatAUD(r.aumAud) : "—";
+      const status = r.status || "—";
+      const updated = r.lastUpdate ? new Date(r.lastUpdate).toLocaleDateString() : "—";
+      return `
+        <tr>
+          <td><strong>${id}</strong></td>
+          <td><a class="link" href="#" data-client="${client}">${client}</a></td>
+          <td>${strategy}</td>
+          <td>${aum}</td>
+          <td><span class="pill">${status}</span></td>
+          <td>${updated}</td>
+          <td style="text-align:right;">
+            <button class="btn btn-small" data-open="${id}">Open</button>
+          </td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="7" class="muted">No mandates.</td></tr>`;
+  }
+
   async function load() {
-    const list = await api("/mandates");
+    const list = await mandatesList();
     state._mandatesList = list;
     draw(list);
   }
 
   function draw(list) {
-    tbody.innerHTML = "";
-    list.forEach(m => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><strong>${m.id}</strong></td>
-        <td><a class="link" href="#">${m.client}</a></td>
-        <td>${m.strategy}</td>
-        <td>${formatAUD(m.aumAud)}</td>
-        <td>${statusPill(m.status)}</td>
-        <td>${m.lastUpdate}</td>
-        <td style="text-align:right;">
-          <button class="btn btn-small" data-action="view">View</button>
-          <button class="btn btn-small" data-action="edit">Edit</button>
-        </td>
-      `;
-      tr.querySelector("a").onclick = (e) => { e.preventDefault(); setState({ view: "client", selectedClient: m.client }); };
-      tr.querySelector('[data-action="view"]').onclick = () => setState({ view: "mandate", selectedMandate: m });
-      tr.querySelector('[data-action="edit"]').onclick = () => setState({ view: "mandate", selectedMandate: m, editMode: true });
-      tbody.appendChild(tr);
-    });
+    tbody.innerHTML = renderMandatesTable(list);
   }
 
   q.oninput = () => {
@@ -1496,8 +1522,37 @@ function ViewMandates() {
     draw(list);
   };
 
+  // Event delegation for table clicks
+  tbody.addEventListener("click", (e) => {
+    const mandateId = e.target?.dataset?.open;
+    const client = e.target?.dataset?.client;
+    
+    if (mandateId) {
+      setState({ view: "mandate", selectedMandate: { id: mandateId } });
+      return;
+    }
+    
+    if (client) {
+      e.preventDefault();
+      setState({ view: "client", selectedClient: client });
+      return;
+    }
+  });
+
   card.querySelector("#refresh").onclick = load;
-  card.querySelector("#newMandateBtn").onclick = () => setState({ view: "mandate", editMode: true });
+  card.querySelector("#newMandateBtn").onclick = async () => {
+    const id = prompt("Mandate ID (e.g., M-AUS-EQ-SS-002):");
+    const client = id ? prompt("Client:") : null;
+    const strategy = client ? prompt("Strategy:") : null;
+    if (!id || !client || !strategy) return;
+    try {
+      await mandateCreate({ id, client, strategy, status: "Active", aumAud: 0 });
+      await load();
+      alert("Mandate created");
+    } catch (e) { 
+      alert(e.message || "Failed to create mandate"); 
+    }
+  };
 
   load().catch(e => alert(e.message));
   return root;
@@ -1555,11 +1610,36 @@ function ViewMandateDetail() {
     
     if (tabName === "breaches") {
       try {
+        const { breaches } = await mandateBreaches(mandate.id);
+        content.innerHTML = "";
+        content.appendChild(buildBreachesPanel({ breaches }));
+        
+        // Add event handlers for breach actions
+        content.addEventListener("click", async (e) => {
+          const breachId = e.target?.dataset?.ack || e.target?.dataset?.resolve;
+          if (!breachId) return;
+          try {
+            const status = e.target.dataset.ack ? "Acknowledged" : "Resolved";
+            await mandatePatchBreach(mandate.id, breachId, { status });
+            alert(`Breach ${status}`);
+            // Refresh the breaches view
+            const { breaches: updatedBreaches } = await mandateBreaches(mandate.id);
+            content.innerHTML = "";
+            content.appendChild(buildBreachesPanel({ breaches: updatedBreaches }));
+          } catch (err) { 
+            alert(err.message || "Update failed"); 
+          }
+        });
+      } catch (e) {
+        content.innerHTML = `<span style="color:#b91c1c">Error loading breaches: ${e.message}</span>`;
+      }
+    } else if (tabName === "overview") {
+      try {
         if (!mandateData) {
           mandateData = await fetchMandateDetail(mandate.id);
         }
         content.innerHTML = "";
-        content.appendChild(buildBreachesPanel(mandateData));
+        content.appendChild(buildMandateOverview(mandateData));
       } catch (e) {
         content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
       }
