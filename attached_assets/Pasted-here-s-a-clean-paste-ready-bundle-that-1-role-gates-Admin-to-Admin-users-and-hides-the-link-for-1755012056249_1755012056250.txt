@@ -1,0 +1,91 @@
+here’s a clean, paste-ready bundle that (1) role-gates Admin to “Admin” users and hides the link for others, and (2) adds a full RFPs page (backend routes + frontend view + sidebar link).
+
+1) Tighten Admin security (backend)
+1a) Add a tiny role guard in routes/admin.js
+At the top, after your imports, add this helper:
+
+js
+Copy code
+// Require "Admin" role
+function requireAdminRole(req, res, next) {
+  try {
+    // req.user.sub is set by requireAuth (email/username)
+    const email = (req.user?.sub || "").toLowerCase();
+    if (!email) return res.status(401).json({ error: "Unauthenticated" });
+
+    // read from users.json to get current role
+    const users = readJson("users.json");
+    const me = users.find(u => (u.email || "").toLowerCase() === email);
+    if (!me || String(me.role || "Analyst") !== "Admin") {
+      return res.status(403).json({ error: "Forbidden: Admins only" });
+    }
+    next();
+  } catch (e) {
+    return res.status(500).json({ error: "Role check failed" });
+  }
+}
+Now apply it to all endpoints by adding it once after the router is created:
+
+js
+Copy code
+// Apply to all admin endpoints
+router.use(requireAuth, requireAdminRole);
+Remove redundant requireAuth on individual handlers inside this file if you have it; the router.use() covers them.
+
+2) Hide Admin UI for non-admins (frontend)
+We’ll fetch the current user (/api/auth/me) and:
+
+Hide the Admin sidebar item if role !== "Admin".
+
+Guard the route so direct navigation to Admin view shows a “Forbidden” message.
+
+2a) Add/confirm a helper in public/app.js (top with other helpers)
+js
+Copy code
+// --- Current user helper (cached) ---
+let CURRENT_USER = null;
+async function fetchMe(){
+  if (CURRENT_USER) return CURRENT_USER;
+  try {
+    CURRENT_USER = await apiGet("/auth/me");
+  } catch { CURRENT_USER = null; }
+  return CURRENT_USER;
+}
+2b) Update sidebar() to conditionally render Admin link
+Find your sidebar() function and replace the Admin link creation with:
+
+js
+Copy code
+// Admin link (only show for Admins)
+(async () => {
+  const me = await fetchMe();
+  if (me?.role === "Admin") {
+    const adminLink = document.createElement("div");
+    adminLink.className = "navlink";
+    adminLink.textContent = "Admin";
+    adminLink.onclick = () => { state.view = "admin"; render(); };
+    side.appendChild(adminLink);
+  }
+})();
+(Leave other links as they are.)
+
+2c) Guard the Admin view at runtime
+At the top of function ViewAdmin() { ... }, add:
+
+js
+Copy code
+// Role gate
+const me = await fetchMe?.();
+if (!me || me.role !== "Admin") {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+  const wrap = document.createElement("div"); wrap.className = "layout"; root.appendChild(wrap);
+  wrap.appendChild(sidebar());
+  const main = document.createElement("div"); main.className = "main"; wrap.appendChild(main);
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<div class="p"><h2>Forbidden</h2><div class="muted">You don't have permission to access Admin.</div></div>`;
+  main.appendChild(card);
+  return root;
+}
+Because your app is vanilla JS, make ViewAdmin async (i.e., async function ViewAdmin(){ ... }) and ensure your view switch supports an async view: if not, you can fetch the user in sidebar() and store CURRENT_USER, then read it synchronously here.
