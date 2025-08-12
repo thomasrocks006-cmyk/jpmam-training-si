@@ -1,0 +1,413 @@
+ here’s a single, paste-ready upgrade that builds a real Profile & Settings page with:
+
+Editable profile (name, phone, photo)
+
+Change password (with validation)
+
+Notification/preferences (incl. “Live updates” toggle for the dashboard)
+
+Role-aware sections (extra admin bits hidden for non-admins)
+
+Audit entries for changes
+
+1) Backend — new Users/Profile routes
+Create routes/users.js
+js
+Copy code
+// routes/users.js
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+import { readJson, writeJson } from "../lib/store.js";
+import { auditLog } from "../lib/audit.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const router = Router();
+const FILE = "users.json";
+
+// resolve /public/uploads
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PUBLIC_DIR = path.resolve(__dirname, "..", "public");
+const UPLOADS_DIR = path.join(PUBLIC_DIR, "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+function loadUsers(){
+  const users = readJson(FILE);
+  return Array.isArray(users) ? users : [];
+}
+function saveUsers(list){ writeJson(FILE, list); }
+function findByEmail(list, email){
+  const e = String(email || "").toLowerCase();
+  return list.find(u => String(u.email || "").toLowerCase() === e);
+}
+function safeUser(u){
+  if (!u) return null;
+  const { password, ...safe } = u;
+  return safe;
+}
+
+// GET /api/users/me
+router.get("/me", requireAuth, (req, res) => {
+  const users = loadUsers();
+  const me = findByEmail(users, req.user?.sub);
+  if (!me) return res.status(404).json({ error: "User not found" });
+  return res.json(safeUser(me));
+});
+
+// PUT /api/users/me  (update profile fields: name, phone, photo)
+router.put("/me", requireAuth, (req, res) => {
+  const users = loadUsers();
+  const me = findByEmail(users, req.user?.sub);
+  if (!me) return res.status(404).json({ error: "User not found" });
+
+  const { name, phone, photo } = req.body || {};
+  if (name != null) me.name = String(name).slice(0, 120);
+  if (phone != null) me.phone = String(phone).slice(0, 40);
+  if (photo != null) me.photo = String(photo); // path to uploaded file
+
+  saveUsers(users);
+  auditLog(req.user?.sub || "user", "profile.update", `${me.email}`);
+  return res.json(safeUser(me));
+});
+
+// PUT /api/users/me/password
+router.put("/me/password", requireAuth, (req, res) => {
+  const users = loadUsers();
+  const me = findByEmail(users, req.user?.sub);
+  if (!me) return res.status(404).json({ error: "User not found" });
+
+  const { current, next } = req.body || {};
+  if (!current || !next) return res.status(400).json({ error: "Missing current or new password" });
+  // NOTE: demo only. In production, verify hash & re-hash. Here we compare plain text to keep mock simple.
+  if (String(me.password || "") !== String(current)) return res.status(400).json({ error: "Current password incorrect" });
+  if (String(next).length < 8) return res.status(400).json({ error: "Password too short (min 8 chars)" });
+
+  me.password = String(next);
+  saveUsers(users);
+  auditLog(req.user?.sub || "user", "profile.password", me.email);
+  return res.json({ ok: true });
+});
+
+// PUT /api/users/me/preferences
+router.put("/me/preferences", requireAuth, (req, res) => {
+  const users = loadUsers();
+  const me = findByEmail(users, req.user?.sub);
+  if (!me) return res.status(404).json({ error: "User not found" });
+
+  const prefs = me.preferences || {};
+  const incoming = req.body || {}; // { emailAlerts: {...}, liveUpdates: true/false }
+  me.preferences = {
+    ...prefs,
+    ...incoming,
+    emailAlerts: { ...(prefs.emailAlerts || {}), ...(incoming.emailAlerts || {}) }
+  };
+
+  saveUsers(users);
+  auditLog(req.user?.sub || "user", "profile.preferences", me.email);
+  return res.json({ ok: true, preferences: me.preferences });
+});
+
+// POST /api/users/me/photo  (accepts { dataUrl } base64 PNG/JPEG)
+router.post("/me/photo", requireAuth, (req, res) => {
+  const users = loadUsers();
+  const me = findByEmail(users, req.user?.sub);
+  if (!me) return res.status(404).json({ error: "User not found" });
+
+  const dataUrl = String(req.body?.dataUrl || "");
+  const m = dataUrl.match(/^data:(image\/png|image\/jpeg);base64,(.+)$/);
+  if (!m) return res.status(400).json({ error: "Invalid dataUrl image" });
+
+  const ext = m[1] === "image/png" ? "png" : "jpg";
+  const file = `avatar_${(me.email || "user").replace(/[^a-z0-9]/gi, "_")}.${ext}`;
+  const dest = path.join(UPLOADS_DIR, file);
+  fs.writeFileSync(dest, Buffer.from(m[2], "base64"));
+  const publicPath = `/uploads/${file}`;
+
+  me.photo = publicPath;
+  saveUsers(users);
+  auditLog(req.user?.sub || "user", "profile.photo", me.email);
+
+  return res.json({ ok: true, photo: publicPath });
+});
+
+export default router;
+Mount it in server.js
+Add import:
+
+js
+Copy code
+import usersRoutes from "./routes/users.js";
+Mount:
+
+js
+Copy code
+app.use("/api/users", usersRoutes);
+2) Frontend — helpers + Profile/Settings view
+2a) API helpers (add near your other helpers in public/app.js)
+js
+Copy code
+// === Profile & Settings API ===
+async function meGet(){ return await apiGet("/users/me"); }
+async function meUpdate(payload){
+  return await apiFetch("/users/me", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+}
+async function meSetPassword(current, next){
+  return await apiFetch("/users/me/password", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ current, next }) });
+}
+async function meSetPrefs(prefs){
+  return await apiFetch("/users/me/preferences", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(prefs) });
+}
+async function meUploadPhoto(dataUrl){
+  return await apiFetch("/users/me/photo", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dataUrl }) });
+}
+2b) Profile/Settings view (add near your other view functions)
+js
+Copy code
+function ViewProfile(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Profile & Settings</h2>
+        <small class="muted">Manage your profile, password, and preferences</small>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top:10px;">
+        <div class="card">
+          <div class="p">
+            <div class="section-title">Profile</div>
+            <div class="grid" style="grid-template-columns: 110px 1fr; gap: 12px;">
+              <div>
+                <img id="avatar" src="" alt="avatar" style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" />
+                <div style="height:8px;"></div>
+                <input type="file" id="photo" accept="image/png,image/jpeg"/>
+                <button class="btn-ghost" id="uploadPhoto" style="margin-top:6px;">Upload</button>
+              </div>
+              <div>
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <label class="muted small">Name</label>
+                    <input id="name" placeholder="Your name"/>
+                  </div>
+                  <div>
+                    <label class="muted small">Phone</label>
+                    <input id="phone" placeholder="+61 ..."/>
+                  </div>
+                </div>
+                <div style="height:8px;"></div>
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
+                  <div>
+                    <label class="muted small">Email</label>
+                    <input id="email" disabled/>
+                  </div>
+                  <div>
+                    <label class="muted small">Role</label>
+                    <input id="role" disabled/>
+                  </div>
+                </div>
+                <div style="height:8px;"></div>
+                <button class="btn" id="saveProfile">Save Changes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="p">
+            <div class="section-title">Change Password</div>
+            <div>
+              <label class="muted small">Current Password</label>
+              <input id="pwCur" type="password" placeholder="Current password"/>
+            </div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top:8px;">
+              <div>
+                <label class="muted small">New Password</label>
+                <input id="pwNew" type="password" placeholder="At least 8 chars"/>
+              </div>
+              <div>
+                <label class="muted small">Confirm New Password</label>
+                <input id="pwConf" type="password" placeholder="Repeat new password"/>
+              </div>
+            </div>
+            <div style="height:8px;"></div>
+            <button class="btn" id="savePw">Update Password</button>
+            <small class="muted" style="display:block;margin-top:6px;">Tip: use 12+ chars, with a mix of letters, numbers, and symbols.</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="p">
+            <div class="section-title">Notifications & Preferences</div>
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="card" style="border:1px solid var(--line);">
+                <div class="p">
+                  <b>Email Alerts</b>
+                  <div class="sep" style="margin:8px 0;"></div>
+                  <label class="inline">
+                    <input type="checkbox" id="alrApprovals"/> Approvals assigned to me
+                  </label><br/>
+                  <label class="inline">
+                    <input type="checkbox" id="alrBreaches"/> Mandate breaches
+                  </label><br/>
+                  <label class="inline">
+                    <input type="checkbox" id="alrRfp"/> RFP stage changes
+                  </label>
+                </div>
+              </div>
+              <div class="card" style="border:1px solid var(--line);">
+                <div class="p">
+                  <b>Dashboard</b>
+                  <div class="sep" style="margin:8px 0;"></div>
+                  <label class="inline">
+                    <input type="checkbox" id="liveUpdates"/> Live updates (SSE)
+                  </label>
+                  <div class="muted small" style="margin-top:6px;">Uncheck if you prefer manual refresh or have spotty connectivity.</div>
+                </div>
+              </div>
+            </div>
+            <div style="height:8px;"></div>
+            <button class="btn" id="savePrefs">Save Preferences</button>
+          </div>
+        </div>
+
+        <div class="card" id="adminOnly" style="display:none;">
+          <div class="p">
+            <div class="section-title">Admin Shortcuts</div>
+            <div class="inline">
+              <button class="btn-ghost" id="goAdmin">Open Admin</button>
+              <button class="btn-ghost" id="goUsers">User Management</button>
+            </div>
+            <small class="muted" style="display:block;margin-top:6px;">Visible only to Admins.</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  // state for current user
+  let user = null;
+
+  (async function init(){
+    try {
+      user = await meGet();
+    } catch {
+      user = await fetchMe(); // fallback to /auth/me minimal
+    }
+    const avatar = card.querySelector("#avatar");
+    avatar.src = user?.photo || "/avatar-placeholder.png";
+
+    card.querySelector("#name").value = user?.name || "";
+    card.querySelector("#phone").value = user?.phone || "";
+    card.querySelector("#email").value = user?.email || "";
+    card.querySelector("#role").value = user?.role || "";
+
+    const prefs = user?.preferences || {};
+    const e = (prefs.emailAlerts || {});
+    card.querySelector("#alrApprovals").checked = !!e.approvals;
+    card.querySelector("#alrBreaches").checked  = !!e.breaches;
+    card.querySelector("#alrRfp").checked       = !!e.rfpStages;
+    // default live updates ON if unset
+    card.querySelector("#liveUpdates").checked  = (prefs.liveUpdates !== false);
+
+    if ((user?.role || "") === "Admin") {
+      card.querySelector("#adminOnly").style.display = "";
+      card.querySelector("#goAdmin").onclick = () => { state.view = "admin"; render(); };
+      card.querySelector("#goUsers").onclick = () => { state.view = "admin"; render(); /* Users tab default there */ };
+    }
+
+    // Save profile
+    card.querySelector("#saveProfile").onclick = async () => {
+      const payload = {
+        name: card.querySelector("#name").value.trim(),
+        phone: card.querySelector("#phone").value.trim(),
+      };
+      try {
+        const res = await meUpdate(payload);
+        CURRENT_USER = res; // refresh local cache
+        toast("Profile saved");
+      } catch (err){
+        alert(err.message || "Failed to save profile");
+      }
+    };
+
+    // Upload photo
+    card.querySelector("#uploadPhoto").onclick = async () => {
+      const file = card.querySelector("#photo").files?.[0];
+      if (!file) return alert("Choose an image first");
+      const okTypes = ["image/png","image/jpeg"];
+      if (!okTypes.includes(file.type)) return alert("Use PNG or JPEG");
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      try {
+        const r = await meUploadPhoto(String(dataUrl));
+        card.querySelector("#avatar").src = r.photo;
+        await meUpdate({ photo: r.photo });
+        CURRENT_USER = await meGet();
+        toast("Photo updated");
+      } catch (err) {
+        alert(err.message || "Upload failed");
+      }
+    };
+
+    // Save password
+    card.querySelector("#savePw").onclick = async () => {
+      const cur = card.querySelector("#pwCur").value;
+      const n1  = card.querySelector("#pwNew").value;
+      const n2  = card.querySelector("#pwConf").value;
+      if (n1 !== n2) return alert("New passwords do not match");
+      if ((n1 || "").length < 8) return alert("New password must be at least 8 characters");
+      try {
+        await meSetPassword(cur, n1);
+        card.querySelector("#pwCur").value = "";
+        card.querySelector("#pwNew").value = "";
+        card.querySelector("#pwConf").value = "";
+        toast("Password updated");
+      } catch (err) {
+        alert(err.message || "Failed to update password");
+      }
+    };
+
+    // Save preferences
+    card.querySelector("#savePrefs").onclick = async () => {
+      const prefs = {
+        emailAlerts: {
+          approvals: card.querySelector("#alrApprovals").checked,
+          breaches:  card.querySelector("#alrBreaches").checked,
+          rfpStages: card.querySelector("#alrRfp").checked
+        },
+        liveUpdates: card.querySelector("#liveUpdates").checked
+      };
+      try {
+        await meSetPrefs(prefs);
+        CURRENT_USER = await meGet();
+        toast("Preferences saved");
+      } catch (err) {
+        alert(err.message || "Failed to save preferences");
+      }
+    };
+  })();
+
+  return root;
+}
