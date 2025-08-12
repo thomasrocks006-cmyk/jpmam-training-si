@@ -1,0 +1,132 @@
+4) Frontend: toggle checklist + add attachments (no full reload)
+Open public/app.js.
+
+4a) Add/extend RFP helpers (near your existing RFP helpers)
+js
+Copy code
+async function rfpToggleChecklist(id, key, done){
+  return await apiFetch(`/rfps/${encodeURIComponent(id)}/checklist`, {
+    method: "PUT", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ key, done })
+  });
+}
+async function rfpAddAttachment(id, payload){
+  return await apiFetch(`/rfps/${encodeURIComponent(id)}/attachments`, {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+}
+4b) Update the RFP Detail checklist tab to toggle in place
+Find the if (name === "checklist") { ... } block in ViewRfpDetail() and replace it with:
+
+js
+Copy code
+if (name === "checklist"){
+  body.innerHTML = `
+    <table class="table">
+      <thead><tr><th>Item</th><th style="width:120px;">Done</th></tr></thead>
+      <tbody>${(r.checklist || []).map(c => `
+        <tr>
+          <td>${c.key}</td>
+          <td>
+            <label class="switch">
+              <input type="checkbox" data-key="${c.key}" ${c.done ? "checked" : ""}/>
+              <span class="slider"></span>
+            </label>
+          </td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+  `;
+  body.querySelector("tbody").addEventListener("change", async (e) => {
+    const key = e.target?.dataset?.key;
+    if (!key) return;
+    const done = !!e.target.checked;
+    try {
+      await rfpToggleChecklist(r.id, key, done);
+      toast("Checklist updated");
+    } catch (err) {
+      alert(err.message || "Failed to update");
+      e.target.checked = !done; // revert UI on error
+    }
+  });
+  return;
+}
+(Uses your existing switch CSS from the Admin page for a consistent toggle.)
+
+4c) Update the Attachments tab to add a new attachment (no reload)
+Replace your if (name === "attachments") { ... } block with:
+
+js
+Copy code
+if (name === "attachments"){
+  body.innerHTML = `
+    <div class="inline">
+      <input id="attName" placeholder="File name (e.g., Perf-Appendix.pdf)" style="width: 280px;">
+      <select id="attType">
+        <option>PDF</option><option>DOCX</option><option>XLSX</option><option>PPTX</option>
+      </select>
+      <input id="attSize" placeholder="Size (e.g., 1.2 MB)" style="width: 120px;">
+      <button class="btn" id="addAtt">Add</button>
+    </div>
+    <div style="height:10px;"></div>
+    <table class="table">
+      <thead><tr><th>Name</th><th style="width:90px;">Type</th><th style="width:100px;">Size</th><th style="width:140px;">Uploaded</th></tr></thead>
+      <tbody id="attRows">
+        ${(r.attachments || []).map(a => `
+          <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+  const rows = body.querySelector("#attRows");
+  body.querySelector("#addAtt").onclick = async () => {
+    const name = body.querySelector("#attName").value.trim();
+    const type = body.querySelector("#attType").value;
+    const size = body.querySelector("#attSize").value.trim() || "—";
+    if (!name) return alert("Enter a file name");
+    try {
+      const a = await rfpAddAttachment(r.id, { name, type, size });
+      rows.insertAdjacentHTML("afterbegin",
+        `<tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`
+      );
+      toast("Attachment added");
+      body.querySelector("#attName").value = "";
+      body.querySelector("#attSize").value = "";
+    } catch (err) {
+      alert(err.message || "Failed to add attachment");
+    }
+  };
+  return;
+}
+4d) Notes tab minor improvement (optional)
+Inside notes tab, change the add handler to avoid a full reload:
+
+js
+Copy code
+body.querySelector("#addNote").onclick = async () => {
+  const t = body.querySelector("#noteText").value.trim();
+  if (!t) return;
+  const note = await rfpAddNote(r.id, t);
+  const list = body.querySelector("#notesList");
+  list.insertAdjacentHTML("afterbegin",
+    `<div class="card"><div class="p">
+      <div class="muted">${new Date(note.ts).toLocaleString()} — ${note.user}</div>
+      <div>${note.text}</div>
+    </div></div>`
+  );
+  body.querySelector("#noteText").value = "";
+  toast("Note added");
+};
+5) (Optional) Tiny CSS helper reuse
+You already have the switch styles from Admin; if not present, ensure this is in public/style.css:
+
+css
+Copy code
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: #e5e7eb; transition: .2s; border-radius: 999px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; top: 3px; background: white; transition: .2s; border-radius: 999px; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+.switch input:checked + .slider { background: #10b981; }
+.switch input:checked + .slider:before { transform: translateX(16px); }
+Quick test (2 minutes)
