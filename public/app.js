@@ -1079,7 +1079,7 @@ function ViewReportDetail() {
   return root;
 }
 
-function ViewProfile(){
+function ViewProfile() {
   const root = document.createElement("div");
   root.className = "container";
   root.appendChild(topNav());
@@ -1098,63 +1098,66 @@ function ViewProfile(){
   card.className = "card";
   card.innerHTML = `
     <div class="p">
-      <div class="flex-between">
-        <h2>Profile & Settings</h2>
-        <small class="muted">Manage your profile, password, and preferences</small>
-      </div>
 
-      <!-- Top: Profile + Preferences in a balanced 2-col grid -->
-      <div class="profile-grid">
-        <!-- Profile block -->
+      <header class="page-head">
+        <div>
+          <h2 class="page-title">Profile & Settings</h2>
+          <p class="page-sub">Manage your profile, password, and preferences</p>
+        </div>
+      </header>
+
+      <!-- Top grid: Profile + Preferences -->
+      <div class="grid grid-2 profile-top">
+
+        <!-- Profile panel -->
         <section class="panel">
-          <div class="panel-title">Profile</div>
-          <div class="form-grid">
-            <div class="avatar-block">
-              <img id="avatar" src="" alt="avatar" class="avatar" />
-              <div class="stack-6">
-                <label class="label">Profile photo</label>
-                <input type="file" id="photo" accept="image/png,image/jpeg"/>
-                <button class="btn-ghost" id="uploadPhoto">Upload</button>
-              </div>
-            </div>
-
-            <div class="stack-12">
-              <div class="form-row-2">
-                <div class="field">
-                  <label class="label">Name</label>
-                  <input id="name" class="input" placeholder="Your name"/>
-                </div>
-                <div class="field">
-                  <label class="label">Phone</label>
-                  <input id="phone" class="input" placeholder="+61 ..."/>
+          <div class="panel-head"><h3>Profile</h3></div>
+          <div class="panel-body">
+            <div class="profile-row">
+              <div class="avatar-col">
+                <img id="avatar" class="avatar" alt="Avatar" src="/avatar-placeholder.png"/>
+                <div class="avatar-actions">
+                  <label class="label">Profile photo</label>
+                  <input type="file" id="photo" accept="image/png,image/jpeg"/>
+                  <button class="btn-ghost" id="uploadPhoto">Upload</button>
                 </div>
               </div>
-
-              <div class="form-row-2">
-                <div class="field">
-                  <label class="label">Email</label>
-                  <input id="email" class="input" disabled/>
+              <div class="form-col">
+                <div class="form-row">
+                  <div class="field">
+                    <label class="label" for="name">Name</label>
+                    <input id="name" class="input" placeholder="Your name"/>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="phone">Phone</label>
+                    <input id="phone" class="input" placeholder="+61 ..."/>
+                  </div>
                 </div>
-                <div class="field">
-                  <label class="label">Role</label>
-                  <input id="role" class="input" disabled/>
+                <div class="form-row">
+                  <div class="field">
+                    <label class="label" for="email">Email</label>
+                    <input id="email" class="input" disabled/>
+                  </div>
+                  <div class="field">
+                    <label class="label" for="role">Role</label>
+                    <input id="role" class="input" disabled/>
+                  </div>
                 </div>
-              </div>
-
-              <div class="form-actions">
-                <button class="btn" id="saveProfile">Save Changes</button>
+                <div class="actions">
+                  <button class="btn" id="saveProfile">Save Changes</button>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        <!-- Preferences block -->
+        <!-- Preferences panel -->
         <section class="panel">
-          <div class="panel-title">Preferences</div>
-          <div class="stack-12">
-            <div class="form-row-2">
+          <div class="panel-head"><h3>Preferences</h3></div>
+          <div class="panel-body">
+            <div class="form-row">
               <div class="field">
-                <label class="label">Theme</label>
+                <label class="label" for="prefTheme">Theme</label>
                 <select id="prefTheme" class="input">
                   <option value="auto">Auto</option>
                   <option value="light">Light</option>
@@ -1162,7 +1165,7 @@ function ViewProfile(){
                 </select>
               </div>
               <div class="field">
-                <label class="label">Email Digest</label>
+                <label class="label" for="prefDigest">Email Digest</label>
                 <select id="prefDigest" class="input">
                   <option value="none">None</option>
                   <option value="daily">Daily</option>
@@ -1171,9 +1174,9 @@ function ViewProfile(){
               </div>
             </div>
 
-            <div class="form-row-2">
+            <div class="form-row">
               <div class="field">
-                <label class="label">Timezone</label>
+                <label class="label" for="prefTz">Timezone</label>
                 <select id="prefTz" class="input">
                   <option value="Australia/Melbourne">Australia/Melbourne</option>
                   <option value="Australia/Sydney">Australia/Sydney</option>
@@ -1183,7 +1186,7 @@ function ViewProfile(){
                 </select>
               </div>
               <div class="field">
-                <label class="label">Date Format</label>
+                <label class="label" for="prefDateFmt">Date Format</label>
                 <select id="prefDateFmt" class="input">
                   <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                   <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -1192,65 +1195,52 @@ function ViewProfile(){
               </div>
             </div>
 
-            <div class="card subtle-card">
-              <div class="p">
-                <b>Email Alerts</b>
-                <div class="sep"></div>
-                <label class="check"><input type="checkbox" id="alrApprovals"/> Approvals assigned to me</label>
-                <label class="check"><input type="checkbox" id="alrBreaches"/> Mandate breaches</label>
-                <label class="check"><input type="checkbox" id="alrRfp"/> RFP stage changes</label>
-                <label class="check"><input type="checkbox" id="liveUpdates"/> Live dashboard updates (SSE)</label>
-              </div>
+            <div class="inner-card">
+              <b>Email Alerts</b>
+              <div class="sp-8"></div>
+              <label class="check"><input type="checkbox" id="alrApprovals"/> Approvals assigned to me</label>
+              <label class="check"><input type="checkbox" id="alrBreaches"/> Mandate breaches</label>
+              <label class="check"><input type="checkbox" id="alrRfp"/> RFP stage changes</label>
+              <label class="check"><input type="checkbox" id="liveUpdates"/> Live dashboard updates (SSE)</label>
             </div>
 
-            <div class="form-actions">
+            <div class="actions">
               <button class="btn" id="savePrefs">Save Preferences</button>
             </div>
           </div>
         </section>
       </div>
 
-      <!-- Bottom: Password + Admin shortcuts in a responsive grid -->
-      <div class="profile-grid-bottom">
+      <!-- Bottom grid: Password / Digest / Admin / Completeness -->
+      <div class="grid grid-3 profile-bottom">
+
         <section class="panel">
-          <div class="panel-title">Change Password</div>
-          <div class="stack-12">
+          <div class="panel-head"><h3>Change Password</h3></div>
+          <div class="panel-body">
             <div class="field">
-              <label class="label">Current Password</label>
+              <label class="label" for="pwCur">Current Password</label>
               <input id="pwCur" type="password" class="input" placeholder="Current password"/>
             </div>
-            <div class="form-row-2">
+            <div class="form-row">
               <div class="field">
-                <label class="label">New Password</label>
+                <label class="label" for="pwNew">New Password</label>
                 <input id="pwNew" type="password" class="input" placeholder="At least 8 chars"/>
               </div>
               <div class="field">
-                <label class="label">Confirm New Password</label>
+                <label class="label" for="pwConf">Confirm New Password</label>
                 <input id="pwConf" type="password" class="input" placeholder="Repeat new password"/>
               </div>
             </div>
-            <div class="form-actions">
+            <div class="actions">
               <button class="btn" id="savePw">Update Password</button>
             </div>
           </div>
         </section>
 
-        <section class="panel" id="adminOnly" style="display:none;">
-          <div class="panel-title">Admin Shortcuts</div>
-          <div class="stack-12">
-            <div class="inline">
-              <button class="btn-ghost" id="goAdmin">Open Admin</button>
-              <button class="btn-ghost" id="goUsers">User Management</button>
-            </div>
-            <small class="muted">Visible only to Admins.</small>
-          </div>
-        </section>
-
-        <!-- Email Digest Panel -->
         <section class="panel">
-          <div class="panel-title">Email Digest</div>
-          <div class="stack-12">
-            <div class="inline">
+          <div class="panel-head"><h3>Email Digest</h3></div>
+          <div class="panel-body">
+            <div class="actions actions-left">
               <button class="btn" id="genDigest">Generate Today's Digest</button>
               <button class="btn-ghost" id="previewDigest">Preview Latest</button>
             </div>
@@ -1258,47 +1248,56 @@ function ViewProfile(){
           </div>
         </section>
 
-        <section class="panel">
-          <div class="panel-title">Profile Completeness</div>
-          <div class="stack-12">
-            <div class="progress-wrap">
-              <div class="progress-bar" style="width:0%"></div>
+        <section class="panel" id="adminOnly" style="display:none;">
+          <div class="panel-head"><h3>Admin Shortcuts</h3></div>
+          <div class="panel-body">
+            <div class="actions actions-left">
+              <button class="btn-ghost" id="goAdmin">Open Admin</button>
+              <button class="btn-ghost" id="goUsers">User Management</button>
             </div>
-            <div class="muted small">0% complete • Missing: Name, Phone, and Profile Photo</div>
+            <p class="muted small">Visible only to Admins.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h3>Profile Completeness</h3></div>
+          <div class="panel-body">
+            <div class="progress"><span id="profProgress"></span></div>
+            <p class="muted small" id="profHint">Fill in your name, phone, and upload a photo to complete your profile.</p>
           </div>
         </section>
       </div>
+
     </div>
   `;
   main.appendChild(card);
 
-  // ----- logic -----
+  // ----- logic (unchanged from our last version, just cleaner hooks) -----
   let user = null;
 
   (async function init(){
     try { user = await meGet(); } catch { user = await fetchMe(); }
 
-    // Populate profile
+    // Profile fields
     card.querySelector("#avatar").src = user?.photo || "/avatar-placeholder.png";
     card.querySelector("#name").value = user?.name || "";
     card.querySelector("#phone").value = user?.phone || "";
     card.querySelector("#email").value = user?.email || "";
     card.querySelector("#role").value = user?.role || "";
 
-    // Populate preferences
+    // Preferences
     const prefs = user?.preferences || {};
     card.querySelector("#prefTheme").value   = prefs.theme || "auto";
     card.querySelector("#prefDigest").value  = prefs.emailDigest || "none";
     card.querySelector("#prefTz").value      = prefs.timezone || "Australia/Melbourne";
     card.querySelector("#prefDateFmt").value = prefs.dateFormat || "DD/MM/YYYY";
-
     const e = (prefs.emailAlerts || {});
     card.querySelector("#alrApprovals").checked = !!e.approvals;
     card.querySelector("#alrBreaches").checked  = !!e.breaches;
     card.querySelector("#alrRfp").checked       = !!e.rfpStages;
     card.querySelector("#liveUpdates").checked  = (prefs.liveUpdates !== false);
 
-    // Admin visibility
+    // Admin show/hide
     if ((user?.role || "") === "Admin") {
       card.querySelector("#adminOnly").style.display = "";
       card.querySelector("#goAdmin").onclick = () => { state.view = "admin"; render(); };
@@ -1307,51 +1306,17 @@ function ViewProfile(){
 
     // Apply theme immediately
     applyTheme(card.querySelector("#prefTheme").value);
+    card.querySelector("#prefTheme").onchange = (e)=> applyTheme(e.target.value);
 
-    // Profile completeness
-    drawProfileCompleteness();
-
-    // Handlers
+    // Wire buttons
     card.querySelector("#saveProfile").onclick = onSaveProfile;
     card.querySelector("#uploadPhoto").onclick = onUploadPhoto;
     card.querySelector("#savePw").onclick      = onSavePassword;
     card.querySelector("#savePrefs").onclick   = onSavePrefs;
+    card.querySelector("#genDigest").onclick   = onRunDigest;
+    card.querySelector("#previewDigest").onclick = onPreviewDigest;
 
-    card.querySelector("#prefTheme").onchange  = (e)=> applyTheme(e.target.value);
-
-    // Digest buttons
-    card.querySelector("#genDigest").onclick = async () => {
-      try {
-        const r = await digestRun("daily");
-        toast(`Generated ${r.generated} digest${r.generated===1?"":"s"}`);
-      } catch (e) {
-        alert(e.message || "Failed to generate digest");
-      }
-    };
-
-    card.querySelector("#previewDigest").onclick = async () => {
-      try {
-        const list = await digestList(1);
-        const latest = list?.digests?.[0];
-        if (!latest) {
-          card.querySelector("#digestPreview").innerHTML = `<div class="muted">No digest yet. Click "Generate Today's Digest".</div>`;
-          return;
-        }
-        const full = await digestGet(latest.id);
-        card.querySelector("#digestPreview").innerHTML = `
-          <div class="card" style="border:1px solid var(--line);">
-            <div class="p">
-              <div class="muted small">${new Date(full.ts).toLocaleString()}</div>
-              <div style="height:8px;"></div>
-              <div class="email" style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;overflow:auto;">
-                ${full.bodyHtml}
-              </div>
-            </div>
-          </div>`;
-      } catch (e) {
-        alert(e.message || "Failed to load digest");
-      }
-    };
+    drawProfileCompleteness();
   })();
 
   function applyTheme(val){
@@ -1367,61 +1332,32 @@ function ViewProfile(){
     const name = card.querySelector("#name").value.trim();
     const phone = card.querySelector("#phone").value.trim();
     const hasPhoto = !!(user?.photo);
-    let score = 0;
-    if (name) score += 34;
-    if (phone) score += 33;
-    if (hasPhoto) score += 33;
+    let score = 0; if (name) score += 34; if (phone) score += 33; if (hasPhoto) score += 33;
     card.querySelector("#profProgress").style.width = `${score}%`;
     card.querySelector("#profHint").textContent = score === 100 ? "Nice! Your profile is complete." : "Fill in your name, phone, and upload a photo to complete your profile.";
   }
 
   async function onSaveProfile(){
-    const payload = {
-      name: card.querySelector("#name").value.trim(),
-      phone: card.querySelector("#phone").value.trim(),
-    };
-    try {
-      const res = await meUpdate(payload);
-      user = res; CURRENT_USER = res;
-      drawProfileCompleteness();
-      toast("Profile saved");
-    } catch (err) { alert(err.message || "Failed to save profile"); }
+    const payload = { name: card.querySelector("#name").value.trim(), phone: card.querySelector("#phone").value.trim() };
+    try { const res = await meUpdate(payload); user = res; CURRENT_USER = res; drawProfileCompleteness(); toast("Profile saved"); }
+    catch (err){ alert(err.message || "Failed to save profile"); }
   }
 
   async function onUploadPhoto(){
     const file = card.querySelector("#photo").files?.[0];
     if (!file) return alert("Choose an image first");
-    const okTypes = ["image/png","image/jpeg"];
-    if (!okTypes.includes(file.type)) return alert("Use PNG or JPEG");
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    try {
-      const r = await meUploadPhoto(String(dataUrl));
-      card.querySelector("#avatar").src = r.photo;
-      await meUpdate({ photo: r.photo });
-      user = await meGet(); CURRENT_USER = user;
-      drawProfileCompleteness();
-      toast("Photo updated");
-    } catch (err) { alert(err.message || "Upload failed"); }
+    if (!["image/png","image/jpeg"].includes(file.type)) return alert("Use PNG or JPEG");
+    const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
+    try { const r = await meUploadPhoto(String(dataUrl)); card.querySelector("#avatar").src = r.photo; await meUpdate({ photo: r.photo }); user = await meGet(); CURRENT_USER = user; drawProfileCompleteness(); toast("Photo updated"); }
+    catch (err){ alert(err.message || "Upload failed"); }
   }
 
   async function onSavePassword(){
-    const cur = card.querySelector("#pwCur").value;
-    const n1  = card.querySelector("#pwNew").value;
-    const n2  = card.querySelector("#pwConf").value;
+    const cur = card.querySelector("#pwCur").value; const n1 = card.querySelector("#pwNew").value; const n2 = card.querySelector("#pwConf").value;
     if (n1 !== n2) return alert("New passwords do not match");
     if ((n1 || "").length < 8) return alert("New password must be at least 8 characters");
-    try {
-      await meSetPassword(cur, n1);
-      card.querySelector("#pwCur").value = "";
-      card.querySelector("#pwNew").value = "";
-      card.querySelector("#pwConf").value = "";
-      toast("Password updated");
-    } catch (err) { alert(err.message || "Failed to update password"); }
+    try { await meSetPassword(cur, n1); ["#pwCur","#pwNew","#pwConf"].forEach(s=>card.querySelector(s).value=""); toast("Password updated"); }
+    catch (err){ alert(err.message || "Failed to update password"); }
   }
 
   async function onSavePrefs(){
@@ -1437,11 +1373,23 @@ function ViewProfile(){
       },
       liveUpdates: card.querySelector("#liveUpdates").checked
     };
+    try { await meSetPrefs(prefs); CURRENT_USER = await meGet(); toast("Preferences saved"); }
+    catch (err){ alert(err.message || "Failed to save preferences"); }
+  }
+
+  async function onRunDigest(){
+    try { const r = await digestRun("daily"); toast(`Generated ${r.generated} digest${r.generated===1?"":"s"}`); }
+    catch (e){ alert(e.message || "Failed to generate digest"); }
+  }
+
+  async function onPreviewDigest(){
     try {
-      await meSetPrefs(prefs);
-      CURRENT_USER = await meGet();
-      toast("Preferences saved");
-    } catch (err) { alert(err.message || "Failed to save preferences"); }
+      const list = await digestList(1); const latest = list?.digests?.[0];
+      const preview = card.querySelector("#digestPreview");
+      if (!latest) { preview.innerHTML = `<div class="muted">No digest yet. Click "Generate Today's Digest".</div>`; return; }
+      const full = await digestGet(latest.id);
+      preview.innerHTML = `<div class="email-preview">${full.bodyHtml}</div>`;
+    } catch (e) { alert(e.message || "Failed to load digest"); }
   }
 
   return root;
