@@ -2,6 +2,7 @@
 import { Router } from "express";
 import { requireAuth } from "../lib/auth.js";
 import { readJson } from "../lib/store.js";
+import { getBreaches } from "../lib/mandatesStore.js";
 
 const router = Router();
 
@@ -24,7 +25,14 @@ router.get("/metrics", requireAuth, (_req, res) => {
   const totalAumAud = aums.reduce((a,b)=>a+b, 0);
   const mtdChangePct = 1.9; // mock MTD%
 
-  const breachesLast30 = 0; // update once you log breaches
+  // REAL breaches last 30 days (Open)
+  const now = Date.now();
+  const d30 = now - 30*24*60*60*1000;
+  const openBreaches = getBreaches({ status: "Open" });
+  const breachesLast30 = openBreaches.filter(b => {
+    const t = new Date(b.opened).getTime();
+    return t >= d30 && t <= now;
+  }).length;
 
   const today = new Date();
   const in7   = new Date(today.getTime() + 7*24*60*60*1000);
@@ -54,29 +62,21 @@ router.get("/activity", requireAuth, (_req, res) => {
   res.json({ feed, lastUpdated: new Date().toISOString() });
 });
 
-// --- NEW: Risk & Compliance alerts (mock) ---
+// Alerts derived from real mandate breaches
 router.get("/alerts", requireAuth, (_req, res) => {
-  // Tie refs to your mandates IDs so deep-links feel real
-  const alerts = [
-    {
-      id: "BR-SS-001",
-      mandateId: "M-AUS-EQ-SS-001",
-      client: "SunSuper",
-      type: "Tracking Error",
-      severity: "Critical",
-      daysOpen: 2,
-      note: "TE exceeded +200bps band vs benchmark."
-    },
-    {
-      id: "BR-QBE-002",
-      mandateId: "M-AU-BOND-QBE-001",
-      client: "QBE Insurance",
-      type: "Concentration",
-      severity: "Medium",
-      daysOpen: 6,
-      note: "Single issuer exposure reached internal alert level."
-    }
-  ];
+  const open = getBreaches({ status: "Open" });
+  const alerts = open.map(b => {
+    const daysOpen = Math.max(1, Math.ceil((Date.now() - new Date(b.opened).getTime()) / (24*60*60*1000)));
+    return {
+      id: b.id,
+      mandateId: b.mandateId,
+      client: b.client,
+      type: b.type,
+      severity: b.severity,
+      daysOpen,
+      note: b.note || ""
+    };
+  });
   res.json({ alerts, lastUpdated: new Date().toISOString() });
 });
 

@@ -774,7 +774,6 @@ function DashboardMain() {
     return card;
   }
 
-
   // Original content below, appended after the new grid structure is added
 
   // --- Original content starts here ---
