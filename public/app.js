@@ -38,6 +38,15 @@ async function adminSetFlags(partial){
 }
 async function adminGetAudit(){ return await api("/admin/audit"); }
 
+// === Notifications API ===
+async function notifList(){ return await api("/notifications"); }
+async function notifRead(id){
+  return await api(`/notifications/${encodeURIComponent(id)}/read`, { method: "POST" });
+}
+async function notifReadAll(){
+  return await api("/notifications/read-all", { method: "POST" });
+}
+
 // === Profile & Settings API ===
 async function meGet(){ return await api("/users/me"); }
 async function meUpdate(payload){
@@ -314,7 +323,22 @@ function topNav() {
           <span id="approvalsBadge" class="badge-dot" style="display:none;"></span>
         </div>
 
-        <button id="notifBtn" class="btn">🔔</button>
+        <!-- Notifications bell -->
+        <div class="notif-wrap">
+          <button class="icon-btn" id="btnBell" aria-label="Notifications">
+            <span class="bell">🔔</span>
+            <span class="badge" id="notifCount" style="display:none;">0</span>
+          </button>
+          <div class="notif-panel card" id="notifPanel" style="display:none;">
+            <div class="p">
+              <div class="flex-between">
+                <b>Notifications</b>
+                <button class="btn-ghost" id="markAll">Mark all read</button>
+              </div>
+              <div id="notifList" class="notif-list"></div>
+            </div>
+          </div>
+        </div>
 
         <div class="menu-wrap">
           <button id="youBtn" class="btn">You ▾</button>
@@ -448,6 +472,85 @@ function topNav() {
   // Click → jump to Dashboard pending
   approvalsBtn.onclick = () => {
     openApprovalsPending();
+  };
+
+  // --- Notification bell setup ---
+  const bellWrap = el.querySelector(".notif-wrap");
+  
+  async function refreshBell(){
+    try {
+      const { notifications = [], unread = 0 } = await notifList();
+      const badge = bellWrap.querySelector("#notifCount");
+      badge.textContent = String(unread);
+      badge.style.display = unread > 0 ? "" : "none";
+
+      const list = bellWrap.querySelector("#notifList");
+      list.innerHTML = notifications.slice(0, 20).map(n => `
+        <div class="notif-row ${n.read ? "read" : "unread"}" data-id="${n.id}" data-ref="${n.ref || ""}" data-type="${n.type}">
+          <div class="notif-title">
+            <b>${n.title}</b> <span class="muted small">• ${new Date(n.ts).toLocaleString()}</span>
+          </div>
+          <div class="muted">${n.body || ""}</div>
+        </div>
+      `).join("") || `<div class="muted">No notifications.</div>`;
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Initialize bell
+  (async function initBell(){
+    await refreshBell();
+    // live via SSE (if enabled in profile)
+    try {
+      const me = await fetchMe();
+      if (me?.preferences?.liveUpdates !== false) {
+        const es = new EventSource("/api/dashboard/stream");
+        es.addEventListener("dash", async () => { await refreshBell(); });
+        es.addEventListener("ping", () => {});
+        es.onerror = () => { es.close?.(); };
+      }
+    } catch {}
+  })();
+
+  // Toggle panel
+  const btn = bellWrap.querySelector("#btnBell");
+  const panel = bellWrap.querySelector("#notifPanel");
+  btn.onclick = () => {
+    panel.style.display = panel.style.display === "none" ? "" : "none";
+  };
+  document.addEventListener("click", (e) => {
+    if (!bellWrap.contains(e.target)) panel.style.display = "none";
+  });
+
+  // Click notifications to deep-link
+  bellWrap.querySelector("#notifList").addEventListener("click", async (e) => {
+    const row = e.target.closest(".notif-row");
+    if (!row) return;
+    const id = row.dataset.id;
+    const ref = row.dataset.ref || "";
+    const type = (row.dataset.type || "").toLowerCase();
+    try { await notifRead(id); } catch {}
+
+    // Navigate by type/ref
+    if (type === "rfp") {
+      state.view = "rfp";
+      state.rfpId = ref || state.rfpId;
+    } else if (type === "breach") {
+      state.view = "mandate";
+      state.selectedMandate = { id: ref };
+    } else if (type === "approval") {
+      state.view = "dashboard";
+    } else {
+      state.view = "dashboard";
+    }
+    render();
+    panel.style.display = "none";
+  });
+
+  // Mark all read
+  bellWrap.querySelector("#markAll").onclick = async () => {
+    try { await notifReadAll(); await refreshBell(); } catch {}
   };
 
   // --- NEW: Brand/Title as Back to Dashboard link ---
