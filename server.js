@@ -11,6 +11,7 @@ import authRoutes from "./routes/auth.js";
 import approvalsRoutes from "./routes/approvals.js";
 import clientsRoutes from "./routes/clients.js";
 import reportsRoutes from "./routes/reports.js";
+import mandatesRoutes from "./routes/mandates.js";
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/approvals", approvalsRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/mandates", mandatesRoutes);
 
 // 3. Always serve index.html for unknown frontend routes (SPA fallback)
 app.get("*", (req, res, next) => {

@@ -13,7 +13,7 @@ const state = {
   // approvals
   approvals: [],
   // view routing
-  view: "auth", // auth -> mfa -> dashboard | client | report | profile
+  view: "auth", // auth -> mfa -> dashboard | client | report | profile | mandates | mandate
   selectedClient: null,
   selectedReport: null,
   // drawer
@@ -282,16 +282,20 @@ function sidebar() {
   el.className = "sidebar";
   el.innerHTML = `
     <div class="card"><div class="p">
-      <div class="row"><span>🏠</span> Home</div>
-      <div class="row" style="margin-top:8px;"><span>📊</span> Dashboard</div>
+      <div class="row link" id="dashboardLink"><span>🏠</span> Dashboard</div>
       <div class="row link" id="clientsLink" style="margin-top:8px;"><span>👥</span> Clients</div>
-      <div class="row" style="margin-top:8px;"><span>📈</span> Mandates</div>
-      <div class="row" style="margin-top:8px;"><span>💼</span> RFPs</div>
-      <div class="row" style="margin-top:8px;"><span>🛡️</span> Portfolio Risk</div>
-      <div class="row" style="margin-top:8px;"><span>⚙️</span> Admin</div>
+      <div class="row link" id="mandatesLink" style="margin-top:8px;"><span>📈</span> Mandates</div>
+      <div class="row link" id="rfpsLink" style="margin-top:8px;"><span>💼</span> RFPs</div>
+      <div class="row link" id="riskLink" style="margin-top:8px;"><span>🛡️</span> Portfolio Risk</div>
+      <div class="row link" id="adminLink" style="margin-top:8px;"><span>⚙️</span> Admin</div>
     </div></div>
   `;
+  el.querySelector("#dashboardLink").onclick = () => setState({ view: "dashboard" });
   el.querySelector("#clientsLink").onclick = () => setState({ view: "clients" });
+  el.querySelector("#mandatesLink").onclick = () => setState({ view: "mandates" });
+  el.querySelector("#rfpsLink").onclick = () => alert("RFPs view is mocked.");
+  el.querySelector("#riskLink").onclick = () => alert("Portfolio Risk view is mocked.");
+  el.querySelector("#adminLink").onclick = () => alert("Admin view is mocked.");
   return el;
 }
 
@@ -587,8 +591,6 @@ function DashboardMain() {
 
   return root;
 }
-
-
 
 function ViewReportDetail() {
   const root = document.createElement("div");
@@ -943,6 +945,194 @@ function ViewClientDetail() {
   return root;
 }
 
+// New Mandates Views
+function ViewMandates() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandates</h2>
+        <div class="row">
+          <input id="q" class="input" placeholder="Filter mandates…" style="width:240px;">
+          <button id="refresh" class="btn">Refresh</button>
+          <button id="newMandateBtn" class="btn primary">New Mandate</button>
+        </div>
+      </div>
+      <div style="height:12px;"></div>
+      <div style="overflow:auto;">
+        <table class="table" id="tbl">
+          <thead><tr>
+            <th>ID</th><th>Client</th><th>Strategy</th><th>AUM (AUD)</th><th>Status</th><th>Last Update</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  root.appendChild(card);
+
+  const tbody = card.querySelector("tbody");
+  const q = card.querySelector("#q");
+
+  async function load() {
+    const list = await api("/mandates");
+    state._mandatesList = list;
+    draw(list);
+  }
+
+  function draw(list) {
+    tbody.innerHTML = "";
+    list.forEach(m => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><strong>${m.id}</strong></td>
+        <td><a class="link" href="#">${m.client}</a></td>
+        <td>${m.strategy}</td>
+        <td>${formatAUD(m.aumAud)}</td>
+        <td>${statusPill(m.status)}</td>
+        <td>${m.lastUpdate}</td>
+        <td style="text-align:right;">
+          <button class="btn btn-small" data-action="view">View</button>
+          <button class="btn btn-small" data-action="edit">Edit</button>
+        </td>
+      `;
+      tr.querySelector("a").onclick = (e) => { e.preventDefault(); setState({ view: "client", selectedClient: m.client }); };
+      tr.querySelector('[data-action="view"]').onclick = () => setState({ view: "mandate", selectedMandate: m });
+      tr.querySelector('[data-action="edit"]').onclick = () => setState({ view: "mandate", selectedMandate: m, editMode: true });
+      tbody.appendChild(tr);
+    });
+  }
+
+  q.oninput = () => {
+    const term = q.value.trim().toLowerCase();
+    const list = (state._mandatesList || []).filter(m =>
+      [m.id.toString(), m.client, m.strategy].some(s => s.toLowerCase().includes(term))
+    );
+    draw(list);
+  };
+
+  card.querySelector("#refresh").onclick = load;
+  card.querySelector("#newMandateBtn").onclick = () => setState({ view: "mandate", editMode: true });
+
+  load().catch(e => alert(e.message));
+  return root;
+}
+
+function ViewMandateDetail() {
+  const mandate = state.selectedMandate;
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "grid";
+  wrap.style.gridTemplateColumns = "1fr";
+  root.appendChild(wrap);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandate: ${mandate?.id || "New"} ${mandate?.editMode ? "(Edit)" : ""}</h2>
+        <button id="back" class="btn">← All Mandates</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div class="section" id="content"><small class="muted">Loading…</small></div>
+      ${mandate?.editMode ? `
+        <div class="section">
+          <div class="row">
+            <button id="save" class="btn primary">Save Mandate</button>
+            <button id="cancel" class="btn">Cancel</button>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  wrap.appendChild(card);
+
+  card.querySelector("#back").onclick = () => setState({ view: "mandates" });
+
+  const content = card.querySelector("#content");
+  let formData = mandate ? { ...mandate } : {};
+
+  function updateForm() {
+    content.innerHTML = `
+      <div class="kv">
+        <dl>
+          <dt>Client</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="client" value="${escapeHtml(formData.client || '')}"/>` : mandate.client}</dd>
+          <dt>Strategy</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="strategy" value="${escapeHtml(formData.strategy || '')}"/>` : mandate.strategy}</dd>
+          <dt>AUM (AUD)</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="aumAud" value="${formData.aumAud || 0}"/>` : formatAUD(mandate.aumAud)}</dd>
+          <dt>Status</dt>
+          <dd>${mandate?.editMode ? `
+            <select class="input" id="status">
+              <option ${formData.status === 'Active' ? 'selected' : ''}>Active</option>
+              <option ${formData.status === 'Pending' ? 'selected' : ''}>Pending</option>
+              <option ${formData.status === 'Terminated' ? 'selected' : ''}>Terminated</option>
+            </select>` : statusPill(mandate.status)}</dd>
+          <dt>Last Update</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="lastUpdate" value="${formData.lastUpdate || ''}"/>` : mandate.lastUpdate}</dd>
+        </dl>
+      </div>
+    `;
+    if (mandate?.editMode) {
+      content.querySelectorAll("input, select").forEach(el => {
+        el.oninput = () => { formData[el.id] = el.value; };
+      });
+    }
+  }
+
+  if (!mandate) {
+    // Mock data for new mandate
+    formData = { id: Date.now(), client: "", strategy: "", aumAud: 0, status: "Pending", lastUpdate: new Date().toISOString().split('T')[0] };
+    updateForm();
+  } else {
+    // Fetch actual data if not in edit mode or if more details are needed
+    (async()=>{
+      try {
+        const data = await api(`/mandates/${mandate.id}`);
+        Object.assign(formData, data); // Merge fetched data
+        updateForm();
+      } catch(e) {
+        content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+      }
+    })();
+  }
+
+  if (mandate?.editMode) {
+    card.querySelector("#save").onclick = async () => {
+      const method = mandate.id ? "PUT" : "POST";
+      const path = mandate.id ? `/mandates/${mandate.id}` : "/mandates";
+      try {
+        const updated = await api(path, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData)
+        });
+        alert("Mandate saved successfully!");
+        setState({ view: "mandates", selectedMandate: null, editMode: false });
+      } catch (e) {
+        alert(`Error saving mandate: ${e.message}`);
+      }
+    };
+    card.querySelector("#cancel").onclick = () => {
+      setState({ view: "mandates", selectedMandate: null, editMode: false });
+    };
+  } else {
+    updateForm(); // Render for view mode
+  }
+
+  return root;
+}
+
 // ---------- Root render ----------
 function render() {
   const app = document.getElementById("app");
@@ -955,9 +1145,10 @@ function render() {
   else if (state.view === "client") view = ViewClientDetail();
   else if (state.view === "report") view = ViewReportDetail();
   else if (state.view === "profile") view = ViewProfile();
+  else if (state.view === "mandates") view = ViewMandates(); // New view
+  else if (state.view === "mandate") view = ViewMandateDetail(); // New view
   app.appendChild(view);
 }
 
 // initial
 render();
-

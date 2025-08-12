@@ -65,4 +65,6 @@ small.muted{ color:#6b7280; }
 .tab { padding:10px 6px; border-bottom:2px solid transparent; cursor:pointer; }
 .tab.active { border-color:#111827; font-weight:600; }
 ul li { margin: 6px 0; }
+.kv { line-height: 1.5; }
+.table td small { color:#6b7280; }
 
