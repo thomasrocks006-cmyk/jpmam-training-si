@@ -61,3 +61,8 @@ small.muted{ color:#6b7280; }
 .menu-item:hover { background: #f8fafc; }
 .menu-divider { height: 1px; background: var(--line); margin: 6px 0; }
 
+.tabs { display:flex; gap:10px; border-bottom:1px solid var(--line); }
+.tab { padding:10px 6px; border-bottom:2px solid transparent; cursor:pointer; }
+.tab.active { border-color:#111827; font-weight:600; }
+ul li { margin: 6px 0; }
+

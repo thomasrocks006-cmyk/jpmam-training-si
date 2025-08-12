@@ -284,13 +284,14 @@ function sidebar() {
     <div class="card"><div class="p">
       <div class="row"><span>🏠</span> Home</div>
       <div class="row" style="margin-top:8px;"><span>📊</span> Dashboard</div>
-      <div class="row" style="margin-top:8px;"><span>👥</span> Clients</div>
+      <div class="row link" id="clientsLink" style="margin-top:8px;"><span>👥</span> Clients</div>
       <div class="row" style="margin-top:8px;"><span>📈</span> Mandates</div>
       <div class="row" style="margin-top:8px;"><span>💼</span> RFPs</div>
       <div class="row" style="margin-top:8px;"><span>🛡️</span> Portfolio Risk</div>
       <div class="row" style="margin-top:8px;"><span>⚙️</span> Admin</div>
     </div></div>
   `;
+  el.querySelector("#clientsLink").onclick = () => setState({ view: "clients" });
   return el;
 }
 
@@ -720,6 +721,264 @@ function ViewProfile() {
   return root;
 }
 
+function ViewClients() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Clients</h2>
+        <div class="row">
+          <input id="q" class="input" placeholder="Filter clients…" style="width:240px;">
+          <button id="refresh" class="btn">Refresh</button>
+        </div>
+      </div>
+      <div style="height:12px;"></div>
+      <div style="overflow:auto;">
+        <table class="table" id="tbl">
+          <thead><tr>
+            <th>Name</th><th>Type</th><th>Strategies</th><th>AUM (AUD)</th><th>Fee (bps)</th><th>Last Review</th><th>Next Review</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  root.appendChild(card);
+
+  const tbody = card.querySelector("tbody");
+  const q = card.querySelector("#q");
+
+  async function load() {
+    const list = await api("/clients");
+    state._clientsList = list;
+    draw(list);
+  }
+  function draw(list) {
+    tbody.innerHTML = "";
+    list.forEach(c => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><a class="link" href="#">${c.name}</a></td>
+        <td>${c.type}</td>
+        <td>${(c.strategies||[]).join(", ")}</td>
+        <td>${formatAUD(c.aumAud)}</td>
+        <td>${c.feeBps}</td>
+        <td>${c.lastReview}</td>
+        <td>${c.nextReview}</td>
+      `;
+      tr.querySelector("a").onclick = (e) => { e.preventDefault(); setState({ view: "client", selectedClient: c.name }); };
+      tbody.appendChild(tr);
+    });
+  }
+
+  q.oninput = () => {
+    const term = q.value.trim().toLowerCase();
+    const list = (state._clientsList || []).filter(c =>
+      [c.name, c.type, (c.strategies||[]).join(" ")].some(s => s.toLowerCase().includes(term))
+    );
+    draw(list);
+  };
+
+  card.querySelector("#refresh").onclick = load;
+  load().catch(e => alert(e.message));
+  return root;
+}
+
+function ViewClientDetail() {
+  const name = state.selectedClient;
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "grid";
+  wrap.style.gridTemplateColumns = "1fr";
+  root.appendChild(wrap);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Client: ${name}</h2>
+        <button id="back" class="btn">← All Clients</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="holdings">Holdings</div>
+        <div class="tab" data-tab="documents">Documents</div>
+        <div class="tab" data-tab="notes">Notes</div>
+      </div>
+      <div class="section" id="content"><small class="muted">Loading…</small></div>
+    </div>
+  `;
+  wrap.appendChild(card);
+
+  card.querySelector("#back").onclick = () => setState({ view: "clients" });
+
+  let data = null;
+  let tab = "overview";
+  const content = card.querySelector("#content");
+
+  (async()=>{
+    try {
+      data = await api(`/clients/${encodeURIComponent(name)}`);
+      drawOverview();
+    } catch(e) {
+      content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  })();
+
+  function setTab(next) {
+    tab = next;
+    for (const t of card.querySelectorAll(".tab")) t.classList.toggle("active", t.dataset.tab === tab);
+    if (tab === "overview") drawOverview();
+    if (tab === "holdings") drawHoldings();
+    if (tab === "documents") drawDocuments();
+    if (tab === "notes") drawNotes();
+  }
+  card.querySelectorAll(".tab").forEach(t => t.onclick = () => setTab(t.dataset.tab));
+
+  function drawOverview() {
+    content.innerHTML = `
+      <div class="grid" style="grid-template-columns: repeat(4,minmax(0,1fr));">
+        ${kpiHtml("AUM (AUD)", formatAUD(data.aumAud))}
+        ${kpiHtml("Fee (bps)", data.feeBps)}
+        ${kpiHtml("Benchmark", data.benchmark)}
+        ${kpiHtml("SLA", data.sla)}
+      </div>
+      <div style="height:14px;"></div>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; align-items:start;">
+        <div class="card"><div class="p">
+          <h3>Contacts</h3>
+          <ul>${data.contacts.map(c=>`<li><strong>${c.name}</strong> — ${c.role}<br><small class="muted">${c.email} · ${c.phone}</small></li>`).join("")}</ul>
+        </div></div>
+        <div class="card"><div class="p">
+          <h3>Key Dates</h3>
+          <ul>
+            <li>Last Review: <strong>${data.lastReview}</strong></li>
+            <li>Next Review: <strong>${data.nextReview}</strong></li>
+            <li>Upcoming meeting: <strong>${(data.meetings[0] && new Date(data.meetings[0].when).toLocaleString()) || "—"}</strong></li>
+          </ul>
+        </div></div>
+      </div>
+      <div style="height:14px;"></div>
+      <div class="card"><div class="p">
+        <h3>Performance (relative, mock)</h3>
+        ${sparkline(data.perfSpark)}
+        <small class="muted">12-point series; illustrative only.</small>
+      </div></div>
+    `;
+  }
+
+  function drawHoldings() {
+    content.innerHTML = `
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap:16px;">
+        <div>
+          <h3>Top 10 Positions</h3>
+          <table class="table"><thead><tr><th>Name</th><th>Weight %</th></tr></thead>
+            <tbody>${data.holdingsTop10.map(h=>`<tr><td>${h.name}</td><td>${h.weight.toFixed(1)}</td></tr>`).join("")}</tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Sector Weights</h3>
+          <table class="table"><thead><tr><th>Sector</th><th>Weight %</th></tr></thead>
+            <tbody>${data.sectorWeights.map(s=>`<tr><td>${s.sector}</td><td>${s.weight.toFixed(1)}</td></tr>`).join("")}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function drawDocuments() {
+    content.innerHTML = `
+      <div class="row">
+        <input id="docName" class="input" placeholder="Document name (e.g., Q3-Perf-Deck.pdf)" style="max-width:360px;">
+        <select id="docType" class="input" style="max-width:120px;"><option>PDF</option><option>XLSX</option><option>CSV</option><option>ZIP</option></select>
+        <button id="addDoc" class="btn">Add</button>
+      </div>
+      <div style="height:10px;"></div>
+      <table class="table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Size</th><th>Uploaded</th></tr></thead>
+        <tbody id="docsBody">${data.docs.map(d=>rowDoc(d)).join("")}</tbody>
+      </table>
+    `;
+    content.querySelector("#addDoc").onclick = async () => {
+      const name = content.querySelector("#docName").value.trim();
+      const type = content.querySelector("#docType").value;
+      if (!name) return alert("Enter a document name");
+      try {
+        const d = await api(`/clients/${encodeURIComponent(state.selectedClient)}/docs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, type, size: "—" })
+        });
+        data.docs.unshift(d);
+        content.querySelector("#docsBody").insertAdjacentHTML("afterbegin", rowDoc(d));
+        content.querySelector("#docName").value = "";
+      } catch(e) { alert(e.message); }
+    };
+  }
+
+  function drawNotes() {
+    content.innerHTML = `
+      <div class="row">
+        <input id="note" class="input" placeholder="Add a note… (saved to audit trail)" />
+        <button id="addNote" class="btn">Add note</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div id="notesList">
+        ${data.notes.map(n=>noteHtml(n)).join("")}
+      </div>
+    `;
+    content.querySelector("#addNote").onclick = async () => {
+      const text = content.querySelector("#note").value.trim();
+      if (!text) return;
+      try {
+        const n = await api(`/clients/${encodeURIComponent(state.selectedClient)}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+        data.notes.unshift(n);
+        content.querySelector("#notesList").insertAdjacentHTML("afterbegin", noteHtml(n));
+        content.querySelector("#note").value = "";
+      } catch(e) { alert(e.message); }
+    };
+  }
+
+  // helpers
+  function kpiHtml(label, val) {
+    return `<div class="card"><div class="p"><small class="muted">${label}</small><h3>${val}</h3></div></div>`;
+  }
+  function rowDoc(d) {
+    return `<tr><td>${d.id}</td><td>${d.name}</td><td>${d.type}</td><td>${d.size}</td><td>${new Date(d.uploadedAt).toLocaleString()}</td></tr>`;
+  }
+  function noteHtml(n) {
+    return `<div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
+      <div><strong>${new Date(n.ts).toLocaleString()}</strong> — <span class="muted">${n.user}</span></div>
+      <div>${escapeHtml(n.text)}</div>
+    </div>`;
+  }
+  function sparkline(arr) {
+    // inline SVG sparkline
+    const w = 320, h = 60, pad = 6;
+    const min = Math.min(...arr), max = Math.max(...arr);
+    const nx = (i) => pad + (i * (w - 2*pad)) / (arr.length - 1 || 1);
+    const ny = (v) => h - pad - ((v - min) * (h - 2*pad)) / ((max - min) || 1);
+    const d = arr.map((v, i) => `${i===0?"M":"L"} ${nx(i).toFixed(1)} ${ny(v).toFixed(1)}`).join(" ");
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="sparkline"><path d="${d}" fill="none" stroke="#111827" stroke-width="2"/></svg>`;
+  }
+  function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  return root;
+}
+
 // ---------- Root render ----------
 function render() {
   const app = document.getElementById("app");
@@ -728,6 +987,7 @@ function render() {
   if (state.view === "auth") view = ViewAuth();
   else if (state.view === "mfa") view = ViewMfa();
   else if (state.view === "dashboard") view = DashboardMain();
+  else if (state.view === "clients") view = ViewClients();
   else if (state.view === "client") view = ViewClientDetail();
   else if (state.view === "report") view = ViewReportDetail();
   else if (state.view === "profile") view = ViewProfile();
