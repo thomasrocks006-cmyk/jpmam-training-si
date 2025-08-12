@@ -25,6 +25,8 @@ const state = {
   activeIndex: -1,
   // approvals
   approvals: [],
+  // dashboard filter state
+  pendingOnly: false,
   // view routing
   view: "auth", // auth -> mfa -> dashboard | client | report | profile | mandates | mandate
   selectedClient: null,
@@ -159,10 +161,18 @@ function ViewMfa() {
   return root;
 }
 
-async function loadDashboard() {
+async function loadDashboard(openId, pendingOnly = false) {
   try {
     const approvals = await api("/approvals");
-    setState({ approvals });
+    setState({ approvals, pendingOnly });
+
+    // open specific approval drawer after render (if requested)
+    if (openId) {
+      setTimeout(() => {
+        const item = state.approvals.find(a => a.id === openId);
+        if (item) setState({ view: "dashboard", drawerOpen: true, drawerItem: item, drawerTab: "details" });
+      }, 50);
+    }
   } catch (e) {
     console.warn(e);
   }
@@ -180,6 +190,13 @@ function topNav() {
       </div>
       <div class="toolbar">
         <button id="newBtn" class="btn">New</button>
+
+        <!-- Approvals icon with badge -->
+        <div class="icon-wrap" title="Approvals (Pending)">
+          <button id="approvalsBtn" class="btn icon-btn">📥</button>
+          <span id="approvalsBadge" class="badge-dot" style="display:none;"></span>
+        </div>
+
         <button id="notifBtn" class="btn">🔔</button>
 
         <div class="menu-wrap">
@@ -278,6 +295,29 @@ function topNav() {
     const within = ev.target === youBtn || youMenu.contains(ev.target);
     if (!within) setMenu(false);
   });
+
+  // --- Approvals button & badge ---
+  const approvalsBtn = el.querySelector("#approvalsBtn");
+  const approvalsBadge = el.querySelector("#approvalsBadge");
+
+  // Compute pending count from current state (if not yet loaded, badge stays hidden)
+  function updateApprovalsBadge() {
+    const count = (state.approvals || []).filter(a => a.status === "Pending").length;
+    if (count > 0) {
+      approvalsBadge.textContent = count > 9 ? "9+" : String(count);
+      approvalsBadge.style.display = "inline-block";
+    } else {
+      approvalsBadge.style.display = "none";
+    }
+  }
+  updateApprovalsBadge();
+
+  // Recompute whenever we re-render topNav (render() recreates DOM) — nothing else needed.
+
+  // Click → jump to Dashboard pending
+  approvalsBtn.onclick = () => {
+    openApprovalsPending();
+  };
 
   return el;
 }
@@ -515,15 +555,25 @@ function DashboardMain() {
 
   const tbody = approvalsCard.querySelector("tbody");
   const drawRows = () => {
-    const filt = approvalsCard.querySelector("#filt").value;
+    const select = approvalsCard.querySelector("#filt");
+    // If we came here via the Approvals icon, force the dropdown to Pending once
+    if (state.pendingOnly && select.value !== "Pending") {
+      select.value = "Pending";
+    }
+    const filt = select.value;
+
     tbody.innerHTML = "";
     state.approvals
-      .filter(a => (filt==="All" ? true : a.status === filt))
-      .filter(a => [a.id,a.requester,a.dept].some(s => s.toLowerCase().includes(state.query.toLowerCase())))
+      .filter(a => (filt === "All" ? true : a.status === filt))
+      .filter(a => [a.id, a.requester, a.dept].some(s => s.toLowerCase().includes(state.query.toLowerCase())))
       .forEach(a => tbody.appendChild(ApprovalRow(a)));
   };
-  approvalsCard.querySelector("#filt").onchange = drawRows;
+  const select = approvalsCard.querySelector("#filt");
+  if (state.pendingOnly) select.value = "Pending";
+  
+  select.onchange = drawRows;
   drawRows();
+  state.pendingOnly = false;
 
   // Client & Portfolio Activity (simple)
   const activity = document.createElement("div");
@@ -1149,6 +1199,17 @@ function ViewMandateDetail() {
 
 
 
+
+function openApprovalById(id) {
+  setState({ view: "dashboard", drawerOpen: false, drawerItem: null });
+  loadDashboard(id, false);
+}
+
+function openApprovalsPending() {
+  // Navigate to dashboard filtered to Pending, no specific ID
+  setState({ view: "dashboard", drawerOpen: false, drawerItem: null });
+  loadDashboard(undefined, true);
+}
 
 // Global function for mandate links
 window.viewMandate = (id) => setState({ view: "mandate", selectedMandate: id });

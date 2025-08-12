@@ -67,3 +67,23 @@ small.muted{ color:#6b7280; }
 ul li { margin: 6px 0; }
 .kv { line-height: 1.5; }
 .table td small { color:#6b7280; }
+
+.icon-wrap { position: relative; display: inline-block; }
+.icon-btn { position: relative; }
+.badge-dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-block;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #dc2626; /* red */
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  border: 1px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.15);
+}
