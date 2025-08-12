@@ -1,0 +1,221 @@
+1) Complete server.js (fixes missing ... + mounts /api/* routes)
+Path: server.js
+Action: Replace the entire file with this.
+
+js
+Copy code
+// server.js
+require("dotenv").config();
+
+const express = require("express");
+const path = require("path");
+const helmet = require("helmet");
+const cors = require("cors");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ---- Middleware
+app.disable("x-powered-by");
+app.use(helmet());
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// CORS: allow a specific origin if provided, otherwise default to same-origin dev
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "";
+if (CORS_ORIGIN) {
+  app.use(
+    cors({
+      origin: CORS_ORIGIN.split(",").map((s) => s.trim()),
+      credentials: true,
+    })
+  );
+} else {
+  app.use(cors());
+}
+
+// ---- Static files
+const publicDir = path.join(__dirname, "public");
+app.use(express.static(publicDir));
+app.use("/uploads", express.static(path.join(publicDir, "uploads")));
+
+// ---- Safe route loader (so missing files don’t crash boot)
+function safeRoute(p) {
+  try {
+    // eslint-disable-next-line import/no-dynamic-require, global-require
+    return require(p);
+  } catch (err) {
+    console.warn(`[warn] Route "${p}" not found or failed to load. Skipping. (${err.message})`);
+    return express.Router(); // empty router so mounts still work
+  }
+}
+
+// ---- API routes mounted under /api
+app.use("/api/auth", safeRoute("./routes/auth"));
+app.use("/api/approvals", safeRoute("./routes/approvals"));
+app.use("/api/clients", safeRoute("./routes/clients"));
+app.use("/api/reports", safeRoute("./routes/reports"));
+app.use("/api/mandates", safeRoute("./routes/mandates"));
+app.use("/api/dashboard", safeRoute("./routes/dashboard"));
+app.use("/api/market", safeRoute("./routes/market"));
+app.use("/api/admin", safeRoute("./routes/admin"));
+
+// Basic healthcheck
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
+// ---- SPA fallback (must come last)
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
+// ---- Start server
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`✅ Server listening on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
+What this fixes:
+
+Removes any ... placeholders.
+
+Adds /api/* mounts (Fix #2).
+
+Serves /public and /uploads.
+
+Provides a healthcheck and SPA fallback.
+
+2) Frontend API helper (fixes public/app.js with clean fetch + auth)
+Path: public/app.js
+Action: Replace the entire file with this.
+
+js
+Copy code
+// public/app.js
+(() => {
+  const API_BASE = window.API_BASE || `${location.origin}/api`;
+
+  function setToken(token) {
+    if (token) localStorage.setItem("token", token);
+  }
+
+  function clearToken() {
+    localStorage.removeItem("token");
+  }
+
+  function getToken() {
+    return localStorage.getItem("token");
+  }
+
+  async function apiFetch(path, options = {}) {
+    const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json");
+    if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+    const res = await fetch(url, { ...options, headers });
+    const isJson = res.headers.get("content-type")?.includes("application/json");
+    const data = isJson ? await res.json().catch(() => ({})) : await res.text();
+
+    if (!res.ok) {
+      // Handle auth loss
+      if (res.status === 401 || res.status === 403) {
+        console.warn("Auth expired or unauthorized. Clearing token.");
+        clearToken();
+        // Optionally redirect to login page if your app has one:
+        // location.href = "/login.html";
+      }
+      const message = (data && (data.message || data.error)) || `Request failed (${res.status})`;
+      throw new Error(message);
+    }
+
+    return data;
+  }
+
+  const api = {
+    base: API_BASE,
+    setToken,
+    clearToken,
+    get: (p, opts) => apiFetch(p, { method: "GET", ...(opts || {}) }),
+    post: (p, body, opts) =>
+      apiFetch(p, { method: "POST", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    put: (p, body, opts) =>
+      apiFetch(p, { method: "PUT", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    patch: (p, body, opts) =>
+      apiFetch(p, { method: "PATCH", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    del: (p, opts) => apiFetch(p, { method: "DELETE", ...(opts || {}) }),
+  };
+
+  // Expose globally for your pages
+  window.api = api;
+})();
+What this fixes:
+
+Replaces the broken "Content-Type": "a line and any ... truncation.
+
+Centralizes auth header and error handling.
+
+Gives you api.get/post/put/patch/del() helpers used across pages.
+
+3) Fix missing reset stylesheet (create public/reset.css)
+Option A (recommended): Add a real reset file so you don’t have to change HTML.
+
+Path: public/reset.css
+Action: Create this new file.
+
+css
+Copy code
+/* public/reset.css - lightweight modern reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body, h1, h2, h3, h4, h5, h6, p,
+figure, blockquote, dl, dd {
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#root, #app {
+  isolation: isolate; /* prevents z-index bleed */
+}
