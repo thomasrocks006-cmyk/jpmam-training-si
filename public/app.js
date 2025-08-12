@@ -161,18 +161,35 @@ function ViewMfa() {
   return root;
 }
 
-async function loadDashboard(openId, pendingOnly = false) {
+async function loadDashboard(openId, pendingOnly = false, openFirstPending = false) {
   try {
     const approvals = await api("/approvals");
+
+    // Set state (includes pending filter)
     setState({ approvals, pendingOnly });
 
-    // open specific approval drawer after render (if requested)
-    if (openId) {
-      setTimeout(() => {
+    // Defer drawer open until DOM renders Dashboard
+    setTimeout(() => {
+      // Priority 1: explicit ID
+      if (openId) {
         const item = state.approvals.find(a => a.id === openId);
-        if (item) setState({ view: "dashboard", drawerOpen: true, drawerItem: item, drawerTab: "details" });
-      }, 50);
-    }
+        if (item) {
+          setState({ view: "dashboard", drawerOpen: true, drawerItem: item, drawerTab: "details" });
+          return;
+        }
+      }
+
+      // Priority 2: open first pending (if requested)
+      if (openFirstPending) {
+        const firstPending = (state.approvals || []).find(a => a.status === "Pending");
+        if (firstPending) {
+          setState({ view: "dashboard", drawerOpen: true, drawerItem: firstPending, drawerTab: "details" });
+        } else {
+          // No pending items; still land on dashboard
+          setState({ view: "dashboard" });
+        }
+      }
+    }, 50);
   } catch (e) {
     console.warn(e);
   }
@@ -1206,9 +1223,9 @@ function openApprovalById(id) {
 }
 
 function openApprovalsPending() {
-  // Navigate to dashboard filtered to Pending, no specific ID
+  // Navigate to dashboard filtered to Pending, and auto-open the first pending item
   setState({ view: "dashboard", drawerOpen: false, drawerItem: null });
-  loadDashboard(undefined, true);
+  loadDashboard(undefined, true, true);
 }
 
 // Global function for mandate links
