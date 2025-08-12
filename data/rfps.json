@@ -3,11 +3,16 @@
     "id": "RFP-SS-24Q3",
     "client": "SunSuper",
     "title": "Australian Equity Core – Renew",
-    "stage": "Draft",
+    "stage": "Submitted",
     "owner": "You",
     "due": "2025-08-16",
-    "lastUpdated": "2025-08-12T16:34:16.476Z",
+    "lastUpdated": "2025-08-12T17:08:14.001Z",
     "notes": [
+      {
+        "ts": "2025-08-12T17:07:32.710Z",
+        "user": "thomas.francis@jpmorgan.com",
+        "text": "list for later date"
+      },
       {
         "ts": "2025-08-12T16:23:39.966Z",
         "user": "You",
@@ -25,7 +30,7 @@
       },
       {
         "key": "Fee schedule review",
-        "done": false
+        "done": true
       }
     ],
     "attachments": [

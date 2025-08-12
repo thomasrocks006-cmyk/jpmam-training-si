@@ -10,9 +10,20 @@
     "employeeId": "AUS-014372",
     "manager": "S. Patel",
     "office": "Melbourne",
-    "phone": "+61 3 5550 1200",
-    "mfaDevices": ["Authenticator App", "SMS Backup"],
-    "startDate": "2022-07-18"
+    "phone": "0475616979",
+    "mfaDevices": [
+      "Authenticator App",
+      "SMS Backup"
+    ],
+    "startDate": "2022-07-18",
+    "photo": "/uploads/avatar_thomas_francis_jpmorgan_com.jpg",
+    "preferences": {
+      "emailAlerts": {
+        "approvals": true,
+        "breaches": true,
+        "rfpStages": true
+      },
+      "liveUpdates": true
+    }
   }
 ]
-
