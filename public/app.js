@@ -1098,23 +1098,20 @@ function ViewProfile() {
   card.className = "card";
   card.innerHTML = `
     <div class="p">
-
       <header class="page-head">
         <div>
           <h2 class="page-title">Profile & Settings</h2>
-          <p class="page-sub">Manage your profile, password, and preferences</p>
+          <p class="page-sub">Your corporate profile, access, and preferences</p>
         </div>
       </header>
 
-      <!-- Top grid: Profile + Preferences -->
-      <div class="grid grid-2 profile-top">
-
-        <!-- Profile panel -->
-        <section class="panel">
-          <div class="panel-head"><h3>Profile</h3></div>
-          <div class="panel-body">
-            <div class="profile-row">
-              <div class="avatar-col">
+      <!-- Identity & Employment -->
+      <section class="panel">
+        <div class="panel-head"><h3>Identity & Employment</h3></div>
+        <div class="panel-body">
+          <div class="grid-2-tight">
+            <div class="id-left">
+              <div class="avatar-row">
                 <img id="avatar" class="avatar" alt="Avatar" src="/avatar-placeholder.png"/>
                 <div class="avatar-actions">
                   <label class="label">Profile photo</label>
@@ -1122,114 +1119,95 @@ function ViewProfile() {
                   <button class="btn-ghost" id="uploadPhoto">Upload</button>
                 </div>
               </div>
-              <div class="form-col">
-                <div class="form-row">
-                  <div class="field">
-                    <label class="label" for="name">Name</label>
-                    <input id="name" class="input" placeholder="Your name"/>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="phone">Phone</label>
-                    <input id="phone" class="input" placeholder="+61 ..."/>
-                  </div>
+            </div>
+            <div class="id-right">
+              <div class="form-row">
+                <div class="field">
+                  <label class="label" for="name">Full Name</label>
+                  <input id="name" class="input" placeholder="Your full name"/>
                 </div>
-                <div class="form-row">
-                  <div class="field">
-                    <label class="label" for="email">Email</label>
-                    <input id="email" class="input" disabled/>
-                  </div>
-                  <div class="field">
-                    <label class="label" for="role">Role</label>
-                    <input id="role" class="input" disabled/>
-                  </div>
+                <div class="field">
+                  <label class="label" for="employeeId">Employee ID</label>
+                  <input id="employeeId" class="input" placeholder="EMP-12345"/>
                 </div>
-                <div class="actions">
-                  <button class="btn" id="saveProfile">Save Changes</button>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label class="label" for="email">Email</label>
+                  <input id="email" class="input" disabled/>
+                </div>
+                <div class="field">
+                  <label class="label" for="dob">Date of Birth</label>
+                  <input id="dob" type="date" class="input"/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label class="label" for="team">Team/Department</label>
+                  <input id="team" class="input" placeholder="Asset Management"/>
+                </div>
+                <div class="field">
+                  <label class="label" for="manager">Manager</label>
+                  <input id="manager" class="input" placeholder="Manager name"/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label class="label" for="costCenter">Cost Center</label>
+                  <input id="costCenter" class="input" placeholder="CC-001"/>
+                </div>
+                <div class="field">
+                  <label class="label" for="office">Office Location</label>
+                  <input id="office" class="input" placeholder="Sydney"/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label class="label" for="phone">Phone</label>
+                  <input id="phone" class="input" placeholder="+61 ..."/>
+                </div>
+                <div class="field">
+                  <label class="label" for="role">Role</label>
+                  <input id="role" class="input" disabled/>
                 </div>
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- Preferences panel -->
-        <section class="panel">
-          <div class="panel-head"><h3>Preferences</h3></div>
-          <div class="panel-body">
-            <div class="form-row">
-              <div class="field">
-                <label class="label" for="prefTheme">Theme</label>
-                <select id="prefTheme" class="input">
-                  <option value="auto">Auto</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </div>
-              <div class="field">
-                <label class="label" for="prefDigest">Email Digest</label>
-                <select id="prefDigest" class="input">
-                  <option value="none">None</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="field">
-                <label class="label" for="prefTz">Timezone</label>
-                <select id="prefTz" class="input">
-                  <option value="Australia/Melbourne">Australia/Melbourne</option>
-                  <option value="Australia/Sydney">Australia/Sydney</option>
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">America/New_York</option>
-                  <option value="Europe/London">Europe/London</option>
-                </select>
-              </div>
-              <div class="field">
-                <label class="label" for="prefDateFmt">Date Format</label>
-                <select id="prefDateFmt" class="input">
-                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="inner-card">
-              <b>Email Alerts</b>
-              <div class="sp-8"></div>
-              <label class="check"><input type="checkbox" id="alrApprovals"/> Approvals assigned to me</label>
-              <label class="check"><input type="checkbox" id="alrBreaches"/> Mandate breaches</label>
-              <label class="check"><input type="checkbox" id="alrRfp"/> RFP stage changes</label>
-              <label class="check"><input type="checkbox" id="liveUpdates"/> Live dashboard updates (SSE)</label>
-            </div>
-
-            <div class="actions">
-              <button class="btn" id="savePrefs">Save Preferences</button>
-            </div>
+      <!-- Systems Access -->
+      <section class="panel">
+        <div class="panel-head"><h3>Market Data & Systems Access</h3></div>
+        <div class="panel-body">
+          <div class="form-row">
+            <label class="check"><input type="checkbox" id="bloomberg"/> Bloomberg Terminal</label>
+            <label class="check"><input type="checkbox" id="factset"/> FactSet</label>
+            <label class="check"><input type="checkbox" id="jpmProp"/> JPM Proprietary Systems</label>
           </div>
-        </section>
-      </div>
+          <div class="form-row">
+            <label class="check"><input type="checkbox" id="aladdin"/> Aladdin (BlackRock)</label>
+            <label class="check"><input type="checkbox" id="morningstar"/> Morningstar Direct</label>
+          </div>
+        </div>
+      </section>
 
-      <!-- Bottom grid: Password / Digest / Admin / Completeness -->
-      <div class="grid grid-3 profile-bottom">
-
+      <!-- Security & Preferences -->
+      <div class="grid-2">
         <section class="panel">
-          <div class="panel-head"><h3>Change Password</h3></div>
+          <div class="panel-head"><h3>Security</h3></div>
           <div class="panel-body">
             <div class="field">
               <label class="label" for="pwCur">Current Password</label>
               <input id="pwCur" type="password" class="input" placeholder="Current password"/>
             </div>
-            <div class="form-row">
-              <div class="field">
-                <label class="label" for="pwNew">New Password</label>
-                <input id="pwNew" type="password" class="input" placeholder="At least 8 chars"/>
-              </div>
-              <div class="field">
-                <label class="label" for="pwConf">Confirm New Password</label>
-                <input id="pwConf" type="password" class="input" placeholder="Repeat new password"/>
-              </div>
+            <div class="field">
+              <label class="label" for="pwNew">New Password</label>
+              <input id="pwNew" type="password" class="input" placeholder="At least 8 chars"/>
+            </div>
+            <div class="field">
+              <label class="label" for="pwConf">Confirm Password</label>
+              <input id="pwConf" type="password" class="input" placeholder="Repeat new password"/>
             </div>
             <div class="actions">
               <button class="btn" id="savePw">Update Password</button>
@@ -1238,41 +1216,52 @@ function ViewProfile() {
         </section>
 
         <section class="panel">
-          <div class="panel-head"><h3>Email Digest</h3></div>
+          <div class="panel-head"><h3>Preferences</h3></div>
           <div class="panel-body">
-            <div class="actions actions-left">
-              <button class="btn" id="genDigest">Generate Today's Digest</button>
-              <button class="btn-ghost" id="previewDigest">Preview Latest</button>
+            <div class="field">
+              <label class="label" for="prefTheme">Theme</label>
+              <select id="prefTheme" class="input">
+                <option value="auto">Auto</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
             </div>
-            <div id="digestPreview" class="digest-preview"></div>
-          </div>
-        </section>
-
-        <section class="panel" id="adminOnly" style="display:none;">
-          <div class="panel-head"><h3>Admin Shortcuts</h3></div>
-          <div class="panel-body">
-            <div class="actions actions-left">
-              <button class="btn-ghost" id="goAdmin">Open Admin</button>
-              <button class="btn-ghost" id="goUsers">User Management</button>
+            <div class="field">
+              <label class="label" for="prefTz">Timezone</label>
+              <select id="prefTz" class="input">
+                <option value="Australia/Melbourne">Australia/Melbourne</option>
+                <option value="Australia/Sydney">Australia/Sydney</option>
+                <option value="UTC">UTC</option>
+              </select>
             </div>
-            <p class="muted small">Visible only to Admins.</p>
+            <div class="field">
+              <label class="label">Notifications</label>
+              <div class="check-group">
+                <label class="check"><input type="checkbox" id="alrApprovals"/> Approvals</label>
+                <label class="check"><input type="checkbox" id="alrBreaches"/> Breaches</label>
+                <label class="check"><input type="checkbox" id="liveUpdates"/> Live updates</label>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn" id="savePrefs">Save Preferences</button>
+            </div>
           </div>
         </section>
+      </div>
 
-        <section class="panel">
-          <div class="panel-head"><h3>Profile Completeness</h3></div>
-          <div class="panel-body">
-            <div class="progress"><span id="profProgress"></span></div>
-            <p class="muted small" id="profHint">Fill in your name, phone, and upload a photo to complete your profile.</p>
-          </div>
-        </section>
+      <!-- Actions -->
+      <div class="actions" style="margin-top: 16px; justify-content: space-between;">
+        <button class="btn" id="saveProfile">Save Profile</button>
+        <div class="actions">
+          <button class="btn-ghost" id="genDigest">Generate Digest</button>
+          <button class="btn-ghost" id="goAdmin" style="display:none;">Admin Panel</button>
+        </div>
       </div>
 
     </div>
   `;
   main.appendChild(card);
 
-  // ----- logic (unchanged from our last version, just cleaner hooks) -----
   let user = null;
 
   (async function init(){
@@ -1281,27 +1270,37 @@ function ViewProfile() {
     // Profile fields
     card.querySelector("#avatar").src = user?.photo || "/avatar-placeholder.png";
     card.querySelector("#name").value = user?.name || "";
-    card.querySelector("#phone").value = user?.phone || "";
+    card.querySelector("#employeeId").value = user?.employeeId || "";
     card.querySelector("#email").value = user?.email || "";
+    card.querySelector("#dob").value = user?.dob || "";
+    card.querySelector("#team").value = user?.team || "";
+    card.querySelector("#manager").value = user?.manager || "";
+    card.querySelector("#costCenter").value = user?.costCenter || "";
+    card.querySelector("#office").value = user?.office || "";
+    card.querySelector("#phone").value = user?.phone || "";
     card.querySelector("#role").value = user?.role || "";
+
+    // Systems access
+    const sys = user?.systemsAccess || {};
+    card.querySelector("#bloomberg").checked = !!sys.bloomberg;
+    card.querySelector("#factset").checked = !!sys.factset;
+    card.querySelector("#jpmProp").checked = !!sys.jpmProp;
+    card.querySelector("#aladdin").checked = !!sys.aladdin;
+    card.querySelector("#morningstar").checked = !!sys.morningstar;
 
     // Preferences
     const prefs = user?.preferences || {};
-    card.querySelector("#prefTheme").value   = prefs.theme || "auto";
-    card.querySelector("#prefDigest").value  = prefs.emailDigest || "none";
-    card.querySelector("#prefTz").value      = prefs.timezone || "Australia/Melbourne";
-    card.querySelector("#prefDateFmt").value = prefs.dateFormat || "DD/MM/YYYY";
+    card.querySelector("#prefTheme").value = prefs.theme || "auto";
+    card.querySelector("#prefTz").value = prefs.timezone || "Australia/Melbourne";
     const e = (prefs.emailAlerts || {});
     card.querySelector("#alrApprovals").checked = !!e.approvals;
-    card.querySelector("#alrBreaches").checked  = !!e.breaches;
-    card.querySelector("#alrRfp").checked       = !!e.rfpStages;
-    card.querySelector("#liveUpdates").checked  = (prefs.liveUpdates !== false);
+    card.querySelector("#alrBreaches").checked = !!e.breaches;
+    card.querySelector("#liveUpdates").checked = (prefs.liveUpdates !== false);
 
     // Admin show/hide
     if ((user?.role || "") === "Admin") {
-      card.querySelector("#adminOnly").style.display = "";
+      card.querySelector("#goAdmin").style.display = "";
       card.querySelector("#goAdmin").onclick = () => { state.view = "admin"; render(); };
-      card.querySelector("#goUsers").onclick = () => { state.view = "admin"; render(); };
     }
 
     // Apply theme immediately
@@ -1311,12 +1310,9 @@ function ViewProfile() {
     // Wire buttons
     card.querySelector("#saveProfile").onclick = onSaveProfile;
     card.querySelector("#uploadPhoto").onclick = onUploadPhoto;
-    card.querySelector("#savePw").onclick      = onSavePassword;
-    card.querySelector("#savePrefs").onclick   = onSavePrefs;
-    card.querySelector("#genDigest").onclick   = onRunDigest;
-    card.querySelector("#previewDigest").onclick = onPreviewDigest;
-
-    drawProfileCompleteness();
+    card.querySelector("#savePw").onclick = onSavePassword;
+    card.querySelector("#savePrefs").onclick = onSavePrefs;
+    card.querySelector("#genDigest").onclick = onRunDigest;
   })();
 
   function applyTheme(val){
@@ -1328,68 +1324,97 @@ function ViewProfile() {
     }
   }
 
-  function drawProfileCompleteness(){
-    const name = card.querySelector("#name").value.trim();
-    const phone = card.querySelector("#phone").value.trim();
-    const hasPhoto = !!(user?.photo);
-    let score = 0; if (name) score += 34; if (phone) score += 33; if (hasPhoto) score += 33;
-    card.querySelector("#profProgress").style.width = `${score}%`;
-    card.querySelector("#profHint").textContent = score === 100 ? "Nice! Your profile is complete." : "Fill in your name, phone, and upload a photo to complete your profile.";
-  }
-
   async function onSaveProfile(){
-    const payload = { name: card.querySelector("#name").value.trim(), phone: card.querySelector("#phone").value.trim() };
-    try { const res = await meUpdate(payload); user = res; CURRENT_USER = res; drawProfileCompleteness(); toast("Profile saved"); }
-    catch (err){ alert(err.message || "Failed to save profile"); }
+    const payload = {
+      name: card.querySelector("#name").value.trim(),
+      employeeId: card.querySelector("#employeeId").value.trim(),
+      dob: card.querySelector("#dob").value,
+      team: card.querySelector("#team").value.trim(),
+      manager: card.querySelector("#manager").value.trim(),
+      costCenter: card.querySelector("#costCenter").value.trim(),
+      office: card.querySelector("#office").value.trim(),
+      phone: card.querySelector("#phone").value.trim(),
+      systemsAccess: {
+        bloomberg: card.querySelector("#bloomberg").checked,
+        factset: card.querySelector("#factset").checked,
+        jpmProp: card.querySelector("#jpmProp").checked,
+        aladdin: card.querySelector("#aladdin").checked,
+        morningstar: card.querySelector("#morningstar").checked
+      }
+    };
+    try {
+      const res = await meUpdate(payload);
+      user = res;
+      CURRENT_USER = res;
+      toast("Profile saved");
+    } catch (err) {
+      alert(err.message || "Failed to save profile");
+    }
   }
 
   async function onUploadPhoto(){
     const file = card.querySelector("#photo").files?.[0];
     if (!file) return alert("Choose an image first");
     if (!["image/png","image/jpeg"].includes(file.type)) return alert("Use PNG or JPEG");
-    const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); });
-    try { const r = await meUploadPhoto(String(dataUrl)); card.querySelector("#avatar").src = r.photo; await meUpdate({ photo: r.photo }); user = await meGet(); CURRENT_USER = user; drawProfileCompleteness(); toast("Photo updated"); }
-    catch (err){ alert(err.message || "Upload failed"); }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    try {
+      const r = await meUploadPhoto(String(dataUrl));
+      card.querySelector("#avatar").src = r.photo;
+      await meUpdate({ photo: r.photo });
+      user = await meGet();
+      CURRENT_USER = user;
+      toast("Photo updated");
+    } catch (err) {
+      alert(err.message || "Upload failed");
+    }
   }
 
   async function onSavePassword(){
-    const cur = card.querySelector("#pwCur").value; const n1 = card.querySelector("#pwNew").value; const n2 = card.querySelector("#pwConf").value;
+    const cur = card.querySelector("#pwCur").value;
+    const n1 = card.querySelector("#pwNew").value;
+    const n2 = card.querySelector("#pwConf").value;
     if (n1 !== n2) return alert("New passwords do not match");
     if ((n1 || "").length < 8) return alert("New password must be at least 8 characters");
-    try { await meSetPassword(cur, n1); ["#pwCur","#pwNew","#pwConf"].forEach(s=>card.querySelector(s).value=""); toast("Password updated"); }
-    catch (err){ alert(err.message || "Failed to update password"); }
+    try {
+      await meSetPassword(cur, n1);
+      ["#pwCur","#pwNew","#pwConf"].forEach(s => card.querySelector(s).value = "");
+      toast("Password updated");
+    } catch (err) {
+      alert(err.message || "Failed to update password");
+    }
   }
 
   async function onSavePrefs(){
     const prefs = {
-      theme:       card.querySelector("#prefTheme").value,
-      emailDigest: card.querySelector("#prefDigest").value,
-      timezone:    card.querySelector("#prefTz").value,
-      dateFormat:  card.querySelector("#prefDateFmt").value,
+      theme: card.querySelector("#prefTheme").value,
+      timezone: card.querySelector("#prefTz").value,
       emailAlerts: {
         approvals: card.querySelector("#alrApprovals").checked,
-        breaches:  card.querySelector("#alrBreaches").checked,
-        rfpStages: card.querySelector("#alrRfp").checked
+        breaches: card.querySelector("#alrBreaches").checked,
       },
       liveUpdates: card.querySelector("#liveUpdates").checked
     };
-    try { await meSetPrefs(prefs); CURRENT_USER = await meGet(); toast("Preferences saved"); }
-    catch (err){ alert(err.message || "Failed to save preferences"); }
+    try {
+      await meSetPrefs(prefs);
+      CURRENT_USER = await meGet();
+      toast("Preferences saved");
+    } catch (err) {
+      alert(err.message || "Failed to save preferences");
+    }
   }
 
   async function onRunDigest(){
-    try { const r = await digestRun("daily"); toast(`Generated ${r.generated} digest${r.generated===1?"":"s"}`); }
-    catch (e){ alert(e.message || "Failed to generate digest"); }
-  }
-
-  async function onPreviewDigest(){
     try {
-      const list = await digestList(1); const latest = list?.digests?.[0];
-      const preview = card.querySelector("#digestPreview");
-      if (!latest) { preview.innerHTML = `<div class="muted">No digest yet. Click "Generate Today's Digest".</div>`; return; }
-      const full = await digestGet(latest.id);
-      preview.innerHTML = `<div class="email-preview">${full.bodyHtml}</div>`;
-    } catch (e) { alert(e.message || "Failed to load digest"); }
+      const r = await digestRun("daily");
+      toast(`Generated ${r.generated} digest${r.generated===1?"":"s"}`);
+    } catch (e) {
+      alert(e.message || "Failed to generate digest");
+    }
   }
 
   return root;

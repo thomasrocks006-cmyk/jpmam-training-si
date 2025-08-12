@@ -1,4 +1,3 @@
-
 // routes/users.js
 import { Router } from "express";
 import { requireAuth } from "../lib/auth.js";
@@ -47,14 +46,33 @@ router.put("/me", requireAuth, (req, res) => {
   const me = findByEmail(users, req.user?.sub);
   if (!me) return res.status(404).json({ error: "User not found" });
 
-  const { name, phone, photo } = req.body || {};
+  const {
+    name, phone, photo,
+    employeeId,           // NEW
+    dob,                  // NEW (YYYY-MM-DD)
+    team,                 // NEW
+    manager,              // NEW
+    costCenter,           // NEW
+    office,               // NEW
+    employmentType,       // optional
+    systemsAccess         // NEW { bloomberg, factset, jpmProp, aladdin, morningstar }
+  } = req.body || {};
+
   if (name != null) me.name = String(name).slice(0, 120);
   if (phone != null) me.phone = String(phone).slice(0, 40);
-  if (photo != null) me.photo = String(photo); // path to uploaded file
+  if (photo != null) me.photo = String(photo);
+
+  if (employeeId != null) me.employeeId = String(employeeId).slice(0, 40);
+  if (dob != null) me.dob = String(dob).slice(0, 10); // YYYY-MM-DD
+  if (team != null) me.team = String(team).slice(0, 80);
+  if (manager != null) me.manager = String(manager).slice(0, 120);
+  if (costCenter != null) me.costCenter = String(costCenter).slice(0, 40);
+  if (office != null) me.office = String(office).slice(0, 80);
+  if (employmentType != null) me.employmentType = String(employmentType).slice(0, 40);
+  if (systemsAccess != null) me.systemsAccess = systemsAccess;
 
   saveUsers(users);
-  auditLog(req.user?.sub || "user", "profile.update", `${me.email}`);
-  return res.json(safeUser(me));
+  res.json(me);
 });
 
 // PUT /api/users/me/password

@@ -276,22 +276,38 @@ ul li { margin: 6px 0; }
 .inline { display: inline-flex; gap: 8px; align-items: center; }
 .sep { height:1px; background: var(--line); } }
 
-/* ===== Profile & Settings layout ===== */
-.profile-grid {
+/* ===== Corporate Profile & Settings layout ===== */
+.grid-2-tight {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 16px;
-  margin-top: 12px;
+  grid-template-columns: 200px 1fr;
+  gap: 20px;
+  align-items: start;
 }
-.profile-grid-bottom {
-  display: grid;
-  grid-template-columns: 1fr 0.8fr 1fr;
-  gap: 16px;
-  margin-top: 16px;
+
+.avatar-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
-@media (max-width: 1100px){
-  .profile-grid { grid-template-columns: 1fr; }
-  .profile-grid-bottom { grid-template-columns: 1fr; }
+
+.avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.check-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 900px){
+  .grid-2-tight { grid-template-columns: 1fr; }
+  .avatar-row { flex-direction: row; align-items: start; }
 }
 
 .panel { border: 1px solid var(--line); border-radius: 12px; background: #fff; }
