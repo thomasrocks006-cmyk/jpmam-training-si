@@ -1096,225 +1096,298 @@ function ViewProfile(){
         <small class="muted">Manage your profile, password, and preferences</small>
       </div>
 
-      <div class="grid" style="grid-template-columns: 1.1fr 1fr; gap: 16px; margin-top:10px;">
-        <div class="card">
-          <div class="p">
-            <div class="section-title">Profile</div>
-            <div class="grid" style="grid-template-columns: 110px 1fr; gap: 12px;">
-              <div>
-                <img id="avatar" src="" alt="avatar" style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:1px solid var(--line);" />
-                <div style="height:8px;"></div>
+      <!-- Top: Profile + Preferences in a balanced 2-col grid -->
+      <div class="profile-grid">
+        <!-- Profile block -->
+        <section class="panel">
+          <div class="panel-title">Profile</div>
+          <div class="form-grid">
+            <div class="avatar-block">
+              <img id="avatar" src="" alt="avatar" class="avatar" />
+              <div class="stack-6">
+                <label class="label">Profile photo</label>
                 <input type="file" id="photo" accept="image/png,image/jpeg"/>
-                <button class="btn-ghost" id="uploadPhoto" style="margin-top:6px;">Upload</button>
+                <button class="btn-ghost" id="uploadPhoto">Upload</button>
               </div>
-              <div>
-                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
-                  <div>
-                    <label class="muted small">Name</label>
-                    <input id="name" class="input" placeholder="Your name"/>
-                  </div>
-                  <div>
-                    <label class="muted small">Phone</label>
-                    <input id="phone" class="input" placeholder="+61 ..."/>
-                  </div>
+            </div>
+
+            <div class="stack-12">
+              <div class="form-row-2">
+                <div class="field">
+                  <label class="label">Name</label>
+                  <input id="name" class="input" placeholder="Your name"/>
                 </div>
-                <div style="height:8px;"></div>
-                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px;">
-                  <div>
-                    <label class="muted small">Email</label>
-                    <input id="email" class="input" disabled/>
-                  </div>
-                  <div>
-                    <label class="muted small">Role</label>
-                    <input id="role" class="input" disabled/>
-                  </div>
+                <div class="field">
+                  <label class="label">Phone</label>
+                  <input id="phone" class="input" placeholder="+61 ..."/>
                 </div>
-                <div style="height:8px;"></div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="field">
+                  <label class="label">Email</label>
+                  <input id="email" class="input" disabled/>
+                </div>
+                <div class="field">
+                  <label class="label">Role</label>
+                  <input id="role" class="input" disabled/>
+                </div>
+              </div>
+
+              <div class="form-actions">
                 <button class="btn" id="saveProfile">Save Changes</button>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card">
-          <div class="p">
-            <div class="section-title">Change Password</div>
-            <div>
-              <label class="muted small">Current Password</label>
-              <input id="pwCur" class="input" type="password" placeholder="Current password"/>
-            </div>
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top:8px;">
-              <div>
-                <label class="muted small">New Password</label>
-                <input id="pwNew" class="input" type="password" placeholder="At least 8 chars"/>
+        <!-- Preferences block -->
+        <section class="panel">
+          <div class="panel-title">Preferences</div>
+          <div class="stack-12">
+            <div class="form-row-2">
+              <div class="field">
+                <label class="label">Theme</label>
+                <select id="prefTheme" class="input">
+                  <option value="auto">Auto</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
               </div>
-              <div>
-                <label class="muted small">Confirm New Password</label>
-                <input id="pwConf" class="input" type="password" placeholder="Repeat new password"/>
+              <div class="field">
+                <label class="label">Email Digest</label>
+                <select id="prefDigest" class="input">
+                  <option value="none">None</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                </select>
               </div>
             </div>
-            <div style="height:8px;"></div>
-            <button class="btn" id="savePw">Update Password</button>
-            <small class="muted" style="display:block;margin-top:6px;">Tip: use 12+ chars, with a mix of letters, numbers, and symbols.</small>
+
+            <div class="form-row-2">
+              <div class="field">
+                <label class="label">Timezone</label>
+                <select id="prefTz" class="input">
+                  <option value="Australia/Melbourne">Australia/Melbourne</option>
+                  <option value="Australia/Sydney">Australia/Sydney</option>
+                  <option value="UTC">UTC</option>
+                  <option value="America/New_York">America/New_York</option>
+                  <option value="Europe/London">Europe/London</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">Date Format</label>
+                <select id="prefDateFmt" class="input">
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="card subtle-card">
+              <div class="p">
+                <b>Email Alerts</b>
+                <div class="sep"></div>
+                <label class="check"><input type="checkbox" id="alrApprovals"/> Approvals assigned to me</label>
+                <label class="check"><input type="checkbox" id="alrBreaches"/> Mandate breaches</label>
+                <label class="check"><input type="checkbox" id="alrRfp"/> RFP stage changes</label>
+                <label class="check"><input type="checkbox" id="liveUpdates"/> Live dashboard updates (SSE)</label>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn" id="savePrefs">Save Preferences</button>
+            </div>
           </div>
-        </div>
+        </section>
+      </div>
 
-        <div class="card">
-          <div class="p">
-            <div class="section-title">Notifications & Preferences</div>
-            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
-              <div class="card" style="border:1px solid var(--line);">
-                <div class="p">
-                  <b>Email Alerts</b>
-                  <div class="sep" style="margin:8px 0;"></div>
-                  <label class="inline">
-                    <input type="checkbox" id="alrApprovals"/> Approvals assigned to me
-                  </label><br/>
-                  <label class="inline">
-                    <input type="checkbox" id="alrBreaches"/> Mandate breaches
-                  </label><br/>
-                  <label class="inline">
-                    <input type="checkbox" id="alrRfp"/> RFP stage changes
-                  </label>
-                </div>
+      <!-- Bottom: Password + Admin shortcuts in a responsive grid -->
+      <div class="profile-grid-bottom">
+        <section class="panel">
+          <div class="panel-title">Change Password</div>
+          <div class="stack-12">
+            <div class="field">
+              <label class="label">Current Password</label>
+              <input id="pwCur" type="password" class="input" placeholder="Current password"/>
+            </div>
+            <div class="form-row-2">
+              <div class="field">
+                <label class="label">New Password</label>
+                <input id="pwNew" type="password" class="input" placeholder="At least 8 chars"/>
               </div>
-              <div class="card" style="border:1px solid var(--line);">
-                <div class="p">
-                  <b>Dashboard</b>
-                  <div class="sep" style="margin:8px 0;"></div>
-                  <label class="inline">
-                    <input type="checkbox" id="liveUpdates"/> Live updates (SSE)
-                  </label>
-                  <div class="muted small" style="margin-top:6px;">Uncheck if you prefer manual refresh or have spotty connectivity.</div>
-                </div>
+              <div class="field">
+                <label class="label">Confirm New Password</label>
+                <input id="pwConf" type="password" class="input" placeholder="Repeat new password"/>
               </div>
             </div>
-            <div style="height:8px;"></div>
-            <button class="btn" id="savePrefs">Save Preferences</button>
+            <div class="form-actions">
+              <button class="btn" id="savePw">Update Password</button>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card" id="adminOnly" style="display:none;">
-          <div class="p">
-            <div class="section-title">Admin Shortcuts</div>
+        <section class="panel" id="adminOnly" style="display:none;">
+          <div class="panel-title">Admin Shortcuts</div>
+          <div class="stack-12">
             <div class="inline">
               <button class="btn-ghost" id="goAdmin">Open Admin</button>
               <button class="btn-ghost" id="goUsers">User Management</button>
             </div>
-            <small class="muted" style="display:block;margin-top:6px;">Visible only to Admins.</small>
+            <small class="muted">Visible only to Admins.</small>
           </div>
-        </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">Profile Completeness</div>
+          <div class="stack-12">
+            <div class="progress"><span id="profProgress" style="width:0%"></span></div>
+            <small class="muted" id="profHint">Fill in your name, phone, and upload a photo to complete your profile.</small>
+          </div>
+        </section>
       </div>
     </div>
   `;
   main.appendChild(card);
 
-  // state for current user
+  // ----- logic -----
   let user = null;
 
   (async function init(){
-    try {
-      user = await meGet();
-    } catch {
-      user = await fetchMe(); // fallback to /auth/me minimal
-    }
-    const avatar = card.querySelector("#avatar");
-    avatar.src = user?.photo || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 24 24'%3E%3Cpath fill='%23ccc' d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+    try { user = await meGet(); } catch { user = await fetchMe(); }
 
+    // Populate profile
+    card.querySelector("#avatar").src = user?.photo || "/avatar-placeholder.png";
     card.querySelector("#name").value = user?.name || "";
     card.querySelector("#phone").value = user?.phone || "";
     card.querySelector("#email").value = user?.email || "";
     card.querySelector("#role").value = user?.role || "";
 
+    // Populate preferences
     const prefs = user?.preferences || {};
+    card.querySelector("#prefTheme").value   = prefs.theme || "auto";
+    card.querySelector("#prefDigest").value  = prefs.emailDigest || "none";
+    card.querySelector("#prefTz").value      = prefs.timezone || "Australia/Melbourne";
+    card.querySelector("#prefDateFmt").value = prefs.dateFormat || "DD/MM/YYYY";
+
     const e = (prefs.emailAlerts || {});
     card.querySelector("#alrApprovals").checked = !!e.approvals;
     card.querySelector("#alrBreaches").checked  = !!e.breaches;
     card.querySelector("#alrRfp").checked       = !!e.rfpStages;
-    // default live updates ON if unset
     card.querySelector("#liveUpdates").checked  = (prefs.liveUpdates !== false);
 
+    // Admin visibility
     if ((user?.role || "") === "Admin") {
       card.querySelector("#adminOnly").style.display = "";
       card.querySelector("#goAdmin").onclick = () => { state.view = "admin"; render(); };
-      card.querySelector("#goUsers").onclick = () => { state.view = "admin"; render(); /* Users tab default there */ };
+      card.querySelector("#goUsers").onclick = () => { state.view = "admin"; render(); };
     }
 
-    // Save profile
-    card.querySelector("#saveProfile").onclick = async () => {
-      const payload = {
-        name: card.querySelector("#name").value.trim(),
-        phone: card.querySelector("#phone").value.trim(),
-      };
-      try {
-        const res = await meUpdate(payload);
-        CURRENT_USER = res; // refresh local cache
-        toast("Profile saved");
-      } catch (err){
-        alert(err.message || "Failed to save profile");
-      }
-    };
+    // Apply theme immediately
+    applyTheme(card.querySelector("#prefTheme").value);
 
-    // Upload photo
-    card.querySelector("#uploadPhoto").onclick = async () => {
-      const file = card.querySelector("#photo").files?.[0];
-      if (!file) return alert("Choose an image first");
-      const okTypes = ["image/png","image/jpeg"];
-      if (!okTypes.includes(file.type)) return alert("Use PNG or JPEG");
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      try {
-        const r = await meUploadPhoto(String(dataUrl));
-        card.querySelector("#avatar").src = r.photo;
-        await meUpdate({ photo: r.photo });
-        CURRENT_USER = await meGet();
-        toast("Photo updated");
-      } catch (err) {
-        alert(err.message || "Upload failed");
-      }
-    };
+    // Profile completeness
+    drawProfileCompleteness();
 
-    // Save password
-    card.querySelector("#savePw").onclick = async () => {
-      const cur = card.querySelector("#pwCur").value;
-      const n1  = card.querySelector("#pwNew").value;
-      const n2  = card.querySelector("#pwConf").value;
-      if (n1 !== n2) return alert("New passwords do not match");
-      if ((n1 || "").length < 8) return alert("New password must be at least 8 characters");
-      try {
-        await meSetPassword(cur, n1);
-        card.querySelector("#pwCur").value = "";
-        card.querySelector("#pwNew").value = "";
-        card.querySelector("#pwConf").value = "";
-        toast("Password updated");
-      } catch (err) {
-        alert(err.message || "Failed to update password");
-      }
-    };
+    // Handlers
+    card.querySelector("#saveProfile").onclick = onSaveProfile;
+    card.querySelector("#uploadPhoto").onclick = onUploadPhoto;
+    card.querySelector("#savePw").onclick      = onSavePassword;
+    card.querySelector("#savePrefs").onclick   = onSavePrefs;
 
-    // Save preferences
-    card.querySelector("#savePrefs").onclick = async () => {
-      const prefs = {
-        emailAlerts: {
-          approvals: card.querySelector("#alrApprovals").checked,
-          breaches:  card.querySelector("#alrBreaches").checked,
-          rfpStages: card.querySelector("#alrRfp").checked
-        },
-        liveUpdates: card.querySelector("#liveUpdates").checked
-      };
-      try {
-        await meSetPrefs(prefs);
-        CURRENT_USER = await meGet();
-        toast("Preferences saved");
-      } catch (err) {
-        alert(err.message || "Failed to save preferences");
-      }
-    };
+    card.querySelector("#prefTheme").onchange  = (e)=> applyTheme(e.target.value);
   })();
+
+  function applyTheme(val){
+    const rootEl = document.documentElement;
+    if (val === "auto") {
+      rootEl.dataset.theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? "dark" : "light";
+    } else {
+      rootEl.dataset.theme = val;
+    }
+  }
+
+  function drawProfileCompleteness(){
+    const name = card.querySelector("#name").value.trim();
+    const phone = card.querySelector("#phone").value.trim();
+    const hasPhoto = !!(user?.photo);
+    let score = 0;
+    if (name) score += 34;
+    if (phone) score += 33;
+    if (hasPhoto) score += 33;
+    card.querySelector("#profProgress").style.width = `${score}%`;
+    card.querySelector("#profHint").textContent = score === 100 ? "Nice! Your profile is complete." : "Fill in your name, phone, and upload a photo to complete your profile.";
+  }
+
+  async function onSaveProfile(){
+    const payload = {
+      name: card.querySelector("#name").value.trim(),
+      phone: card.querySelector("#phone").value.trim(),
+    };
+    try {
+      const res = await meUpdate(payload);
+      user = res; CURRENT_USER = res;
+      drawProfileCompleteness();
+      toast("Profile saved");
+    } catch (err) { alert(err.message || "Failed to save profile"); }
+  }
+
+  async function onUploadPhoto(){
+    const file = card.querySelector("#photo").files?.[0];
+    if (!file) return alert("Choose an image first");
+    const okTypes = ["image/png","image/jpeg"];
+    if (!okTypes.includes(file.type)) return alert("Use PNG or JPEG");
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    try {
+      const r = await meUploadPhoto(String(dataUrl));
+      card.querySelector("#avatar").src = r.photo;
+      await meUpdate({ photo: r.photo });
+      user = await meGet(); CURRENT_USER = user;
+      drawProfileCompleteness();
+      toast("Photo updated");
+    } catch (err) { alert(err.message || "Upload failed"); }
+  }
+
+  async function onSavePassword(){
+    const cur = card.querySelector("#pwCur").value;
+    const n1  = card.querySelector("#pwNew").value;
+    const n2  = card.querySelector("#pwConf").value;
+    if (n1 !== n2) return alert("New passwords do not match");
+    if ((n1 || "").length < 8) return alert("New password must be at least 8 characters");
+    try {
+      await meSetPassword(cur, n1);
+      card.querySelector("#pwCur").value = "";
+      card.querySelector("#pwNew").value = "";
+      card.querySelector("#pwConf").value = "";
+      toast("Password updated");
+    } catch (err) { alert(err.message || "Failed to update password"); }
+  }
+
+  async function onSavePrefs(){
+    const prefs = {
+      theme:       card.querySelector("#prefTheme").value,
+      emailDigest: card.querySelector("#prefDigest").value,
+      timezone:    card.querySelector("#prefTz").value,
+      dateFormat:  card.querySelector("#prefDateFmt").value,
+      emailAlerts: {
+        approvals: card.querySelector("#alrApprovals").checked,
+        breaches:  card.querySelector("#alrBreaches").checked,
+        rfpStages: card.querySelector("#alrRfp").checked
+      },
+      liveUpdates: card.querySelector("#liveUpdates").checked
+    };
+    try {
+      await meSetPrefs(prefs);
+      CURRENT_USER = await meGet();
+      toast("Preferences saved");
+    } catch (err) { alert(err.message || "Failed to save preferences"); }
+  }
 
   return root;
 }
