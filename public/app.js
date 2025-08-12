@@ -45,7 +45,7 @@ function ViewAuth() {
     <div class="grid" style="grid-template-columns: 1fr; gap:16px;">
       <!-- Sign in card -->
       <div class="card"><div class="p">
-        <h2 style="margin-bottom:6px;">J.P. Morgan</h2>
+        <h2 style="margin-bottom:6px;">J.P.Morgan</h2>
         <small class="muted">Employee Access Portal — Asset Management</small>
         <div style="height:12px;"></div>
         <div>
@@ -68,7 +68,7 @@ function ViewAuth() {
         <div style="height:12px;"></div>
         <button id="loginBtn" class="btn primary" style="width:100%;">Sign in</button>
         <div style="height:8px;"></div>
-        <small class="muted">By signing in you agree to J.P. Morgan's acceptable use & security policy.</small>
+        <small class="muted">By signing in you agree to J.P.Morgan's acceptable use & security policy.</small>
       </div></div>
 
       <!-- Security reminders -->
@@ -95,7 +95,7 @@ function ViewAuth() {
       </div></div>
 
       <div style="text-align:center;">
-        <small class="muted">© 2025 J.P. Morgan. All rights reserved.</small>
+        <small class="muted">© 2025 J.P.Morgan. All rights reserved.</small>
       </div>
     </div>
   `;
@@ -160,7 +160,7 @@ function topNav() {
   el.className = "nav";
   el.innerHTML = `
     <div class="container inner">
-      <div class="brand">J.P. Morgan</div>
+      <div class="brand">J.P.Morgan</div>
       <div class="searchbox">
         <input id="search" placeholder="Search mandates, clients, reports… (press / to focus)" />
         <ul id="suggest" class="suggest" style="display:none"></ul>
