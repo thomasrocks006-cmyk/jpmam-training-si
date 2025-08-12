@@ -1,0 +1,110 @@
+4) Frontend — connect SSE, role-aware tiles, real deadlines
+Open public/app.js.
+
+4a) SSE client + update handlers (put near other fetch helpers)
+js
+Copy code
+// === Dashboard SSE (with fallback) ===
+let dashES = null;
+function connectDashStream({ onEvent }){
+  try {
+    if (dashES) dashES.close();
+    dashES = new EventSource("/api/dashboard/stream");
+    dashES.addEventListener("dash", (e) => {
+      try { const evt = JSON.parse(e.data); onEvent?.(evt); } catch {}
+    });
+    dashES.addEventListener("ping", () => {/* keepalive */});
+    dashES.onerror = () => { /* fallback reconnect after delay */ setTimeout(()=>connectDashStream({ onEvent }), 5000); };
+  } catch {
+    // no SSE support: ignore; UI will rely on polling/refresh buttons
+  }
+}
+4b) Role-aware tile rendering
+Where you previously fetch metrics in DashboardMain:
+
+After const [metrics, activity, market, alerts, deadlines] = await Promise.all([...])
+gate what you append using metrics.visibleTiles:
+
+js
+Copy code
+const tiles = new Set(metrics.visibleTiles || []);
+
+if (tiles.has("approvals")) col1.appendChild(row); // includes approvals tile inside row
+if (tiles.has("market"))    col1.appendChild(marketCard);
+if (tiles.has("alerts"))    col1.appendChild(alertsCard);
+if (tiles.has("rfps"))      col2.appendChild(deadlinesCard);
+// activity is useful to everyone; keep it visible or gate it:
+col2.appendChild(activityCard);
+(Keep your existing mounts for Approvals/Mandates in col3 as is.)
+
+4c) Real deadlines (no change needed if you already call /dashboard/deadlines)
+If not, ensure you fetch with:
+
+js
+Copy code
+async function fetchDeadlines(){
+  const r = await apiGet("/dashboard/deadlines");
+  return r.items || [];
+}
+…and pass into buildDeadlinesCard(deadlines) (you already do).
+
+4d) Live refresh on events
+Right after you render the dashboard grid, hook the stream:
+
+js
+Copy code
+connectDashStream({
+  onEvent: async (evt) => {
+    // Minimal, targeted refetches based on event type
+    if (!evt || !evt.type) return;
+
+    // Quick wins:
+    if (evt.type.startsWith("rfp.")) {
+      // refresh deadlines (rfp due dates)
+      const r = await apiGet("/dashboard/deadlines");
+      const newCard = buildDeadlinesCard(r.items || []);
+      // Replace the old deadlines card in Column 2
+      const parent = document.querySelector(".dashboard-grid");
+      const old = parent?.querySelector(".card:has(> .p > .flex-between > h3:contains('Deadlines'))"); // if :has not supported, keep a known id
+      // Simpler: just re-render full dashboard for reliability:
+      render();
+      return;
+    }
+
+    if (evt.type.startsWith("breach.") || evt.type.startsWith("mandate.")) {
+      // refresh metrics (breaches/approvals tile)
+      // and Alerts card (breaches list)
+      render();
+      return;
+    }
+  }
+});
+Simpler and reliable: on any dash event, just call render() (the SPA is small). If you want surgical updates, keep refs to your existing cards and swap innerHTML.
+
+(Note: if your environment doesn’t support :has() or :contains(), prefer the “just render()” approach.)
+
+5) Small win: ensure Approvals badge deep-links to first pending
+If you want to jump to the first pending approval, add a tiny endpoint.
+
+5a) In routes/dashboard.js add:
+js
+Copy code
+router.get("/approvals/first-pending", requireAuth, (_req, res) => {
+  const approvals = readJson("approvals.json");
+  const first = approvals.find(a => a.status === "Pending") || null;
+  res.json({ first });
+});
+5b) In public/app.js, adjust the Pending Approvals tile’s onClick:
+js
+Copy code
+onClick: async () => {
+  try {
+    const r = await apiGet("/dashboard/approvals/first-pending");
+    state.view = "approvals";
+    state.approvalId = r?.first?.id || null; // if your Approvals view supports focusing by id
+    render();
+  } catch {
+    state.view = "approvals"; render();
+  }
+}
+(If your Approvals page doesn’t accept state.approvalId yet, we can add a quick “scroll-to” in that view later. For now it still opens the approvals list.)

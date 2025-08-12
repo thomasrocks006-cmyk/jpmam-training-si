@@ -1,0 +1,61 @@
+[
+  {
+    "id": "RFP-SS-24Q3",
+    "client": "SunSuper",
+    "title": "Australian Equity Core – Renew",
+    "stage": "Draft",
+    "owner": "You",
+    "due": "2025-08-16",
+    "lastUpdated": "2025-08-12T16:23:39.966Z",
+    "notes": [
+      {
+        "ts": "2025-08-12T16:23:39.966Z",
+        "user": "You",
+        "text": "Initial outline complete."
+      }
+    ],
+    "checklist": [
+      {
+        "key": "Team bios updated",
+        "done": true
+      },
+      {
+        "key": "Track record appendix",
+        "done": true
+      },
+      {
+        "key": "Fee schedule review",
+        "done": false
+      }
+    ],
+    "attachments": [
+      {
+        "name": "RFP-Questionnaire.docx",
+        "type": "DOCX",
+        "size": "312 KB",
+        "uploadedAt": "2025-08-12T16:23:39.966Z"
+      }
+    ]
+  },
+  {
+    "id": "RFP-QBE-ALPHA",
+    "client": "QBE Insurance",
+    "title": "Alpha Overlay Proposal",
+    "stage": "Internal Review",
+    "owner": "Coverage",
+    "due": "2025-08-22",
+    "lastUpdated": "2025-08-12T16:23:39.966Z",
+    "notes": [],
+    "checklist": [
+      {
+        "key": "Risk backtest section",
+        "done": false
+      },
+      {
+        "key": "Compliance statement",
+        "done": false
+      }
+    ],
+    "attachments": []
+  }
+]

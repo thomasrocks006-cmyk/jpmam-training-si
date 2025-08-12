@@ -1,0 +1,239 @@
+here’s Step 3 as a single, paste-ready bundle:
+
+Event-driven dashboard via Server-Sent Events (SSE)
+
+Real deadlines sourced from persisted RFP due dates (+ upcoming client meetings)
+
+Role-aware tiles (server decides; UI hides/shows accordingly)
+
+Small win: Pending Approvals tile already deep-links; we also refresh counts on events
+
+1) Event bus (shared)
+Create lib/events.js
+js
+Copy code
+// lib/events.js
+import { EventEmitter } from "events";
+export const bus = new EventEmitter();
+
+// Helper to emit dashboard events consistently
+export function emitDash(type, payload = {}) {
+  bus.emit("dashboard:event", { type, ts: new Date().toISOString(), payload });
+}
+2) Wire events in existing routes
+2a) RFP routes — emit on changes
+Open routes/rfps.js and add this import near the top:
+
+js
+Copy code
+import { emitDash } from "../lib/events.js";
+Then after each mutation, emit:
+
+After POST "/" (create):
+
+js
+Copy code
+emitDash("rfp.create", { id: r.id, client: r.client, stage: r.stage, due: r.due });
+After PUT "/:id" (update):
+
+js
+Copy code
+emitDash("rfp.update", { id: rfps[idx].id });
+After PUT "/:id/stage":
+
+js
+Copy code
+emitDash("rfp.stage", { id: r.id, stage });
+After POST "/:id/notes":
+
+js
+Copy code
+emitDash("rfp.note", { id: r.id });
+After PUT "/:id/checklist":
+
+js
+Copy code
+emitDash("rfp.checklist", { id: r.id, key, done });
+After POST "/:id/attachments":
+
+js
+Copy code
+emitDash("rfp.attachment", { id: r.id, name });
+2b) Mandates routes — emit on changes
+Open routes/mandates.js and add:
+
+js
+Copy code
+import { emitDash } from "../lib/events.js";
+Then emit:
+
+After POST "/" (create):
+
+js
+Copy code
+emitDash("mandate.create", { id: m.id, client: m.client });
+After PUT "/:id" (update):
+
+js
+Copy code
+emitDash("mandate.update", { id: m.id || req.params.id });
+After DELETE "/:id":
+
+js
+Copy code
+emitDash("mandate.delete", { id: req.params.id });
+After POST "/:id/breaches":
+
+js
+Copy code
+emitDash("breach.create", { mandateId: req.params.id, breachId: b.id, severity: b.severity });
+After PATCH "/:id/breaches/:breachId":
+
+js
+Copy code
+emitDash("breach.update", { mandateId: req.params.id, breachId: req.params.breachId, status: req.body?.status });
+3) Dashboard routes — SSE stream, real deadlines, role-aware tiles
+Open routes/dashboard.js and patch:
+A) Imports
+
+js
+Copy code
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+import { readJson } from "../lib/store.js";
+import { getBreaches } from "../lib/mandatesStore.js";
+import { bus } from "../lib/events.js";
+B) Role helper (top of file)
+
+js
+Copy code
+function getUserRole(req){
+  try {
+    const email = (req.user?.sub || "").toLowerCase();
+    const users = readJson("users.json");
+    const me = users.find(u => (u.email || "").toLowerCase() === email);
+    return String(me?.role || "Analyst");
+  } catch { return "Analyst"; }
+}
+
+// Server decides which tiles are visible per role
+function visibleTilesFor(role){
+  // You can tune this map anytime
+  if (role === "Admin") return ["approvals","alerts","rfps","market","risk"];
+  if (role === "Risk")  return ["alerts","risk","approvals","market"];
+  if (role === "Coverage") return ["rfps","approvals","market"];
+  return ["approvals","market"]; // Analyst default
+}
+C) Real deadlines
+Replace your existing /deadlines handler with this:
+
+js
+Copy code
+router.get("/deadlines", requireAuth, (_req, res) => {
+  const today = new Date();
+  const in14  = new Date(today.getTime() + 14*24*60*60*1000);
+
+  // From persisted RFPs
+  let items = [];
+  try {
+    const { rfps = [] } = (()=> {
+      try {
+        const rfpsArr = readJson("rfps.json");
+        return { rfps: Array.isArray(rfpsArr) ? rfpsArr : [] };
+      } catch { return { rfps: [] }; }
+    })();
+    items.push(...rfps
+      .filter(r => r.due)
+      .map(r => ({ due: r.due, title: r.title, client: r.client, owner: r.owner || "Coverage", ref: r.id })));
+  } catch {}
+
+  // Upcoming client meetings (dup of clients.js mock for now)
+  const clientMeetings = [
+    { due: "2025-08-14", title: "Q2 Performance Review (Meeting)", client: "SunSuper", owner: "You", ref: "MEET-SS-Q2" },
+    { due: "2025-08-18", title: "LDI Constraint Review (Meeting)", client: "QBE Insurance", owner: "Coverage", ref: "MEET-QBE-LDI" }
+  ];
+
+  items.push(...clientMeetings);
+
+  // Window filter & sort
+  const inWindow = items.filter(x => {
+    const d = new Date(x.due);
+    return d >= today && d <= in14;
+  }).sort((a,b) => a.due.localeCompare(b.due));
+
+  res.json({ items: inWindow, lastUpdated: new Date().toISOString() });
+});
+D) Role-aware metrics
+In your /metrics handler, add role + visibleTiles:
+
+js
+Copy code
+router.get("/metrics", requireAuth, (_req, res) => {
+  const role = getUserRole(_req);
+  const tiles = visibleTilesFor(role);
+
+  const approvals = readJson("approvals.json");
+  const pending = approvals.filter(a => a.status === "Pending").length;
+  const approved = approvals.filter(a => a.status === "Approved").length;
+
+  const aums = [4200000000, 2850000000];
+  const totalAumAud = aums.reduce((a,b)=>a+b, 0);
+  const mtdChangePct = 1.9;
+
+  const now = Date.now();
+  const d30 = now - 30*24*60*60*1000;
+  const openBreaches = getBreaches({ status: "Open" });
+  const breachesLast30 = openBreaches.filter(b => {
+    const t = new Date(b.opened).getTime();
+    return t >= d30 && t <= now;
+  }).length;
+
+  const today = new Date();
+  const in7   = new Date(today.getTime() + 7*24*60*60*1000);
+  const meetings = [
+    { client: "SunSuper",      when: "2025-08-14T02:00:00Z", topic: "Q2 Performance Review" },
+    { client: "QBE Insurance", when: "2025-08-18T01:00:00Z", topic: "LDI Constraint Review" },
+  ].filter(m => {
+    const d = new Date(m.when);
+    return d >= today && d <= in7;
+  });
+
+  res.json({
+    role,
+    visibleTiles: tiles,
+    totalAumAud,
+    mtdChangePct,
+    approvals: { pending, approved },
+    breachesLast30,
+    meetings,
+    lastUpdated: new Date().toISOString()
+  });
+});
+E) SSE stream
+Add this new endpoint:
+
+js
+Copy code
+// Server-Sent Events: live dashboard updates
+router.get("/stream", requireAuth, (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  const ping = setInterval(() => {
+    res.write(`event: ping\ndata: {"ts":"${new Date().toISOString()}"}\n\n`);
+  }, 15000);
+
+  const onEvent = (evt) => {
+    // push minimal payload; client can decide what to refetch
+    res.write(`event: dash\ndata: ${JSON.stringify(evt)}\n\n`);
+  };
+
+  bus.on("dashboard:event", onEvent);
+
+  req.on("close", () => {
+    clearInterval(ping);
+    bus.off("dashboard:event", onEvent);
+  });
+});
