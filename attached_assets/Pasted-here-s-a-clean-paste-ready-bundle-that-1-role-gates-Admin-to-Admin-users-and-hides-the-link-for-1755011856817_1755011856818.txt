@@ -1,0 +1,503 @@
+here’s a clean, paste-ready bundle that (1) role-gates Admin to “Admin” users and hides the link for others, and (2) adds a full RFPs page (backend routes + frontend view + sidebar link).
+
+1) Tighten Admin security (backend)
+1a) Add a tiny role guard in routes/admin.js
+At the top, after your imports, add this helper:
+
+js
+Copy code
+// Require "Admin" role
+function requireAdminRole(req, res, next) {
+  try {
+    // req.user.sub is set by requireAuth (email/username)
+    const email = (req.user?.sub || "").toLowerCase();
+    if (!email) return res.status(401).json({ error: "Unauthenticated" });
+
+    // read from users.json to get current role
+    const users = readJson("users.json");
+    const me = users.find(u => (u.email || "").toLowerCase() === email);
+    if (!me || String(me.role || "Analyst") !== "Admin") {
+      return res.status(403).json({ error: "Forbidden: Admins only" });
+    }
+    next();
+  } catch (e) {
+    return res.status(500).json({ error: "Role check failed" });
+  }
+}
+Now apply it to all endpoints by adding it once after the router is created:
+
+js
+Copy code
+// Apply to all admin endpoints
+router.use(requireAuth, requireAdminRole);
+Remove redundant requireAuth on individual handlers inside this file if you have it; the router.use() covers them.
+
+2) Hide Admin UI for non-admins (frontend)
+We’ll fetch the current user (/api/auth/me) and:
+
+Hide the Admin sidebar item if role !== "Admin".
+
+Guard the route so direct navigation to Admin view shows a “Forbidden” message.
+
+2a) Add/confirm a helper in public/app.js (top with other helpers)
+js
+Copy code
+// --- Current user helper (cached) ---
+let CURRENT_USER = null;
+async function fetchMe(){
+  if (CURRENT_USER) return CURRENT_USER;
+  try {
+    CURRENT_USER = await apiGet("/auth/me");
+  } catch { CURRENT_USER = null; }
+  return CURRENT_USER;
+}
+2b) Update sidebar() to conditionally render Admin link
+Find your sidebar() function and replace the Admin link creation with:
+
+js
+Copy code
+// Admin link (only show for Admins)
+(async () => {
+  const me = await fetchMe();
+  if (me?.role === "Admin") {
+    const adminLink = document.createElement("div");
+    adminLink.className = "navlink";
+    adminLink.textContent = "Admin";
+    adminLink.onclick = () => { state.view = "admin"; render(); };
+    side.appendChild(adminLink);
+  }
+})();
+(Leave other links as they are.)
+
+2c) Guard the Admin view at runtime
+At the top of function ViewAdmin() { ... }, add:
+
+js
+Copy code
+// Role gate
+const me = await fetchMe?.();
+if (!me || me.role !== "Admin") {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+  const wrap = document.createElement("div"); wrap.className = "layout"; root.appendChild(wrap);
+  wrap.appendChild(sidebar());
+  const main = document.createElement("div"); main.className = "main"; wrap.appendChild(main);
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<div class="p"><h2>Forbidden</h2><div class="muted">You don't have permission to access Admin.</div></div>`;
+  main.appendChild(card);
+  return root;
+}
+Because your app is vanilla JS, make ViewAdmin async (i.e., async function ViewAdmin(){ ... }) and ensure your view switch supports an async view: if not, you can fetch the user in sidebar() and store CURRENT_USER, then read it synchronously here.
+
+3) RFPs backend
+3a) Create routes/rfps.js
+js
+Copy code
+// routes/rfps.js
+import { Router } from "express";
+import { requireAuth } from "../lib/auth.js";
+
+const router = Router();
+
+// In-memory demo (resets on restart)
+let RFPs = [
+  {
+    id: "RFP-SS-24Q3",
+    client: "SunSuper",
+    title: "Australian Equity Core – Renew",
+    stage: "Draft",           // Draft | Internal Review | Client Review | Submitted | Won | Lost
+    owner: "You",
+    due: new Date(Date.now() + 4*24*60*60*1000).toISOString().slice(0,10),
+    lastUpdated: new Date().toISOString(),
+    notes: [
+      { ts: new Date().toISOString(), user: "You", text: "Initial outline complete." }
+    ],
+    checklist: [
+      { key: "Team bios updated", done: true },
+      { key: "Track record appendix", done: true },
+      { key: "Fee schedule review", done: false }
+    ],
+    attachments: [
+      { name: "RFP-Questionnaire.docx", type: "DOCX", size: "312 KB", uploadedAt: new Date().toISOString() }
+    ]
+  },
+  {
+    id: "RFP-QBE-ALPHA",
+    client: "QBE Insurance",
+    title: "Alpha Overlay Proposal",
+    stage: "Internal Review",
+    owner: "Coverage",
+    due: new Date(Date.now() + 10*24*60*60*1000).toISOString().slice(0,10),
+    lastUpdated: new Date().toISOString(),
+    notes: [],
+    checklist: [
+      { key: "Risk backtest section", done: false },
+      { key: "Compliance statement", done: false }
+    ],
+    attachments: []
+  }
+];
+
+// List with simple filters: ?stage=Draft&client=SunSuper
+router.get("/", requireAuth, (req, res) => {
+  const { stage, client, q } = req.query || {};
+  let out = [...RFPs];
+  if (stage)  out = out.filter(r => r.stage.toLowerCase() === String(stage).toLowerCase());
+  if (client) out = out.filter(r => r.client.toLowerCase().includes(String(client).toLowerCase()));
+  if (q)      out = out.filter(r => (r.id + r.title).toLowerCase().includes(String(q).toLowerCase()));
+  out.sort((a,b)=> (a.due || "").localeCompare(b.due || ""));
+  res.json({ rfps: out, total: out.length });
+});
+
+router.get("/:id", requireAuth, (req, res) => {
+  const r = RFPs.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "RFP not found" });
+  res.json(r);
+});
+
+router.post("/", requireAuth, (req, res) => {
+  const { id, client, title, owner="You", due } = req.body || {};
+  if (!id || !client || !title) return res.status(400).json({ error: "Missing id, client, or title" });
+  if (RFPs.find(x => x.id === id)) return res.status(409).json({ error: "RFP id exists" });
+  const r = { id, client, title, stage: "Draft", owner, due: due || null, lastUpdated: new Date().toISOString(), notes: [], checklist: [], attachments: [] };
+  RFPs.unshift(r);
+  res.status(201).json(r);
+});
+
+router.put("/:id", requireAuth, (req, res) => {
+  const idx = RFPs.findIndex(x => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "RFP not found" });
+  RFPs[idx] = { ...RFPs[idx], ...req.body, lastUpdated: new Date().toISOString() };
+  res.json(RFPs[idx]);
+});
+
+router.post("/:id/notes", requireAuth, (req, res) => {
+  const r = RFPs.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "RFP not found" });
+  const text = String(req.body?.text || "").trim();
+  if (!text) return res.status(400).json({ error: "Missing note text" });
+  const note = { ts: new Date().toISOString(), user: req.user?.sub || "user", text: text.slice(0, 2000) };
+  r.notes.unshift(note);
+  r.lastUpdated = new Date().toISOString();
+  res.status(201).json(note);
+});
+
+router.put("/:id/stage", requireAuth, (req, res) => {
+  const r = RFPs.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: "RFP not found" });
+  const stage = String(req.body?.stage || "");
+  const allowed = ["Draft","Internal Review","Client Review","Submitted","Won","Lost"];
+  if (!allowed.includes(stage)) return res.status(400).json({ error: "Invalid stage" });
+  r.stage = stage;
+  r.lastUpdated = new Date().toISOString();
+  res.json(r);
+});
+
+export default router;
+3b) Mount RFPs in server.js
+Add import:
+
+js
+Copy code
+import rfpsRoutes from "./routes/rfps.js";
+Mount:
+
+js
+Copy code
+app.use("/api/rfps", rfpsRoutes);
+4) RFPs frontend
+4a) Add helpers in public/app.js
+Place near other API helpers:
+
+js
+Copy code
+// === RFPs API ===
+async function rfpList(params = {}){
+  const qs = new URLSearchParams(params).toString();
+  return await apiGet(`/rfps${qs ? `?${qs}` : ""}`);
+}
+async function rfpGet(id){ return await apiGet(`/rfps/${encodeURIComponent(id)}`); }
+async function rfpCreate(payload){
+  return await apiFetch("/rfps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+}
+async function rfpSetStage(id, stage){
+  return await apiFetch(`/rfps/${encodeURIComponent(id)}/stage`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }) });
+}
+async function rfpAddNote(id, text){
+  return await apiFetch(`/rfps/${encodeURIComponent(id)}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+}
+4b) Add a simple RFPs view
+Paste near other views:
+
+js
+Copy code
+function ViewRfps(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  // Sidebar
+  wrap.appendChild(sidebar());
+
+  // Main
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>RFPs</h2>
+        <div class="inline">
+          <input id="q" placeholder="Search id/title…" style="width: 220px;">
+          <select id="stage">
+            <option value="">All stages</option>
+            ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option>${s}</option>`).join("")}
+          </select>
+          <button class="btn" id="new">New RFP</button>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <table class="table">
+        <thead>
+          <tr><th style="width:160px;">ID</th><th>Title</th><th style="width:160px;">Client</th><th style="width:150px;">Stage</th><th style="width:120px;">Due</th><th style="width:120px;"></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const rows = card.querySelector("#rows");
+  const q = card.querySelector("#q");
+  const stage = card.querySelector("#stage");
+
+  async function refresh(){
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+    try {
+      const { rfps=[] } = await rfpList({ q: q.value, stage: stage.value });
+      rows.innerHTML = rfps.map(r => `
+        <tr>
+          <td>${r.id}</td>
+          <td>${r.title}</td>
+          <td>${r.client}</td>
+          <td><span class="pill">${r.stage}</span></td>
+          <td>${r.due || "-"}</td>
+          <td><button class="btn-ghost" data-id="${r.id}">Open</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="muted">No RFPs</td></tr>`;
+    } catch(e){
+      rows.innerHTML = `<tr><td colspan="6" style="color:#b91c1c">${e.message}</td></tr>`;
+    }
+  }
+
+  q.oninput = () => refresh();
+  stage.onchange = () => refresh();
+  refresh();
+
+  // New RFP (tiny inline dialog)
+  card.querySelector("#new").onclick = async () => {
+    const id = prompt("RFP ID (e.g., RFP-SS-24Q3):");
+    const client = id ? prompt("Client (e.g., SunSuper):") : null;
+    const title = client ? prompt("Title:") : null;
+    if (!id || !client || !title) return;
+    try { await rfpCreate({ id, client, title }); await refresh(); }
+    catch(e){ alert(e.message || "Failed to create RFP"); }
+  };
+
+  // Open detail
+  rows.addEventListener("click", async (e) => {
+    const id = e.target?.dataset?.id;
+    if (!id) return;
+    state.view = "rfp";
+    state.rfpId = id;
+    render();
+  });
+
+  return root;
+}
+4c) RFP Detail view
+Paste near other detail views:
+
+js
+Copy code
+function ViewRfpDetail(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>RFP: <span id="rid"></span></h2>
+        <button class="btn" id="back">← All RFPs</button>
+      </div>
+      <div class="sep" style="margin:10px 0;"></div>
+      <div id="meta" class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px;"></div>
+
+      <div class="tabs" id="tabs" style="margin-top:10px;">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="notes">Notes</div>
+        <div class="tab" data-tab="checklist">Checklist</div>
+        <div class="tab" data-tab="attachments">Attachments</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const rid = card.querySelector("#rid");
+  const meta = card.querySelector("#meta");
+  const body = card.querySelector("#body");
+  const tabs = card.querySelector("#tabs");
+
+  card.querySelector("#back").onclick = () => { state.view = "rfps"; render(); };
+
+  async function load(){
+    try {
+      const r = await rfpGet(state.rfpId);
+      rid.textContent = r.id;
+      meta.innerHTML = `
+        <div class="card"><div class="p"><b>Title</b><div>${r.title}</div></div></div>
+        <div class="card"><div class="p"><b>Client</b><div>${r.client}</div></div></div>
+        <div class="card"><div class="p"><b>Owner</b><div>${r.owner}</div></div></div>
+        <div class="card"><div class="p"><b>Stage</b>
+          <div class="inline">
+            <select id="stageSel">
+              ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option ${s===r.stage?"selected":""}>${s}</option>`).join("")}
+            </select>
+            <button class="btn" id="saveStage">Save</button>
+          </div>
+        </div></div>
+        <div class="card"><div class="p"><b>Due</b><div>${r.due || "-"}</div></div></div>
+        <div class="card"><div class="p"><b>Updated</b><div>${new Date(r.lastUpdated).toLocaleString()}</div></div></div>
+      `;
+
+      async function renderTab(name){
+        if (name === "overview") {
+          body.innerHTML = `
+            <div class="muted">Use the controls above to manage stage. Other sections are in the tabs.</div>
+          `;
+          return;
+        }
+        if (name === "notes"){
+          body.innerHTML = `
+            <div class="inline">
+              <input id="noteText" placeholder="Add a note..." style="width: 60%;">
+              <button class="btn" id="addNote">Add</button>
+            </div>
+            <div style="height:8px;"></div>
+            <div id="notesList"></div>
+          `;
+          const list = body.querySelector("#notesList");
+          list.innerHTML = (r.notes || []).map(n => `
+            <div class="card"><div class="p">
+              <div class="muted">${new Date(n.ts).toLocaleString()} — ${n.user}</div>
+              <div>${n.text}</div>
+            </div></div>
+          `).join("") || `<div class="muted">No notes.</div>`;
+          body.querySelector("#addNote").onclick = async () => {
+            const t = body.querySelector("#noteText").value.trim();
+            if (!t) return;
+            await rfpAddNote(r.id, t);
+            state.view = "rfp"; render(); // simple reload
+          };
+          return;
+        }
+        if (name === "checklist"){
+          body.innerHTML = `
+            <table class="table">
+              <thead><tr><th>Item</th><th style="width:100px;">Done</th></tr></thead>
+              <tbody>${(r.checklist || []).map(c => `
+                <tr><td>${c.key}</td><td>${c.done ? "✅" : "—"}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          `;
+          return;
+        }
+        if (name === "attachments"){
+          body.innerHTML = `
+            <table class="table">
+              <thead><tr><th>Name</th><th style="width:90px;">Type</th><th style="width:100px;">Size</th><th style="width:140px;">Uploaded</th></tr></thead>
+              <tbody>${(r.attachments || []).map(a => `
+                <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          `;
+          return;
+        }
+      }
+
+      // Tab wiring
+      tabs.addEventListener("click", (e) => {
+        const t = e.target.closest(".tab");
+        if (!t) return;
+        tabs.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+        t.classList.add("active");
+        renderTab(t.dataset.tab);
+      });
+      await renderTab("overview");
+
+      // Save stage
+      card.querySelector("#saveStage").onclick = async () => {
+        const val = card.querySelector("#stageSel").value;
+        await rfpSetStage(r.id, val);
+        toast("RFP stage updated");
+        state.view = "rfp"; render();
+      };
+
+    } catch(e){
+      main.innerHTML = `<div class="card"><div class="p" style="color:#b91c1c">${e.message}</div></div>`;
+    }
+  }
+
+  load();
+  return root;
+}
+4d) Add sidebar link and route
+In sidebar(), add:
+
+js
+Copy code
+const rfpsLink = document.createElement("div");
+rfpsLink.className = "navlink";
+rfpsLink.textContent = "RFPs";
+rfpsLink.onclick = () => { state.view = "rfps"; render(); };
+side.appendChild(rfpsLink);
+In your main view switch:
+
+js
+Copy code
+else if (state.view === "rfps") view = ViewRfps();
+else if (state.view === "rfp") view = ViewRfpDetail();
+Tip: In your Deadlines dashboard card, you can now route RFP-* refs to the RFPs page:
+
+js
+Copy code
+if (ref.startsWith("RFP-")) { state.view = "rfps"; render(); }
+5) (Optional) Tiny CSS polish
+Append to public/style.css:
+
+css
+Copy code
+.inline { display: inline-flex; gap: 8px; align-items: center; }
+.sep { height:1px; background: var(--line); }
