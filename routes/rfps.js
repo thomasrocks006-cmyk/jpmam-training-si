@@ -1,9 +1,9 @@
-
 // routes/rfps.js
 import { Router } from "express";
 import { requireAuth } from "../lib/auth.js";
 import { readJson, writeJson } from "../lib/store.js";
 import { auditLog } from "../lib/audit.js";
+import { emitDash } from "../lib/sse.js"; // Assuming SSE emitter is in lib/sse.js
 
 const router = Router();
 const FILE = "rfps.json";
@@ -89,9 +89,10 @@ router.post("/", requireAuth, (req, res) => {
   if (!id || !client || !title) return res.status(400).json({ error: "Missing id, client, or title" });
   if (rfps.find(x => x.id === id)) return res.status(409).json({ error: "RFP id exists" });
   const r = { id, client, title, stage: "Draft", owner, due, lastUpdated: new Date().toISOString(), notes: [], checklist: [], attachments: [] };
-  rfps.unshift(r);
+  rfps.push(r);
   saveRfps(rfps);
-  auditLog(req.user?.sub || "user", "rfp.create", `${id} – ${client} – ${title}`);
+  auditLog(req.user?.sub || "user", "rfp.create", `RFP ${r.id} created for ${r.client}`);
+  emitDash("rfp.create", { id: r.id, client: r.client, stage: r.stage, due: r.due });
   res.status(201).json(r);
 });
 
@@ -103,66 +104,77 @@ router.put("/:id", requireAuth, (req, res) => {
   touch(rfps[idx]);
   saveRfps(rfps);
   auditLog(req.user?.sub || "user", "rfp.update", req.params.id);
+  emitDash("rfp.update", { id: req.params.id });
   res.json(rfps[idx]);
 });
 
 router.put("/:id/stage", requireAuth, (req, res) => {
   const rfps = loadRfps();
-  const r = rfps.find(x => x.id === req.params.id);
-  if (!r) return res.status(404).json({ error: "RFP not found" });
+  const idx = rfps.findIndex(x => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "RFP not found" });
   const stage = String(req.body?.stage || "");
   const allowed = ["Draft","Internal Review","Client Review","Submitted","Won","Lost"];
   if (!allowed.includes(stage)) return res.status(400).json({ error: "Invalid stage" });
-  r.stage = stage;
-  touch(r);
-  saveRfps(rfps);
-  auditLog(req.user?.sub || "user", "rfp.stage", `${r.id} -> ${stage}`);
-  res.json(r);
+  rfps[idx].stage = stage;
+  rfps[idx].lastUpdated = new Date().toISOString();
+  writeJson("rfps.json", rfps);
+  auditLog(req.user?.sub || "user", "rfp.stage", `RFP ${rfps[idx].id} stage → ${stage}`);
+  emitDash("rfp.stage", { id: rfps[idx].id, stage });
+  res.json(rfps[idx]);
 });
 
 router.post("/:id/notes", requireAuth, (req, res) => {
   const rfps = loadRfps();
-  const r = rfps.find(x => x.id === req.params.id);
-  if (!r) return res.status(404).json({ error: "RFP not found" });
+  const idx = rfps.findIndex(x => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "RFP not found" });
   const text = String(req.body?.text || "").trim();
   if (!text) return res.status(400).json({ error: "Missing note text" });
   const note = { ts: new Date().toISOString(), user: req.user?.sub || "user", text: text.slice(0, 2000) };
-  r.notes.unshift(note);
-  touch(r);
-  saveRfps(rfps);
-  auditLog(req.user?.sub || "user", "rfp.note", `${r.id} (${text.slice(0,60)}...)`);
+  rfps[idx].notes = rfps[idx].notes || [];
+  rfps[idx].notes.unshift(note);
+  rfps[idx].lastUpdated = new Date().toISOString();
+  writeJson("rfps.json", rfps);
+  auditLog(req.user?.sub || "user", "rfp.note", `RFP ${rfps[idx].id} note added`);
+  emitDash("rfp.note", { id: rfps[idx].id });
   res.status(201).json(note);
 });
 
 // NEW: toggle checklist items
 router.put("/:id/checklist", requireAuth, (req, res) => {
   const rfps = loadRfps();
-  const r = rfps.find(x => x.id === req.params.id);
-  if (!r) return res.status(404).json({ error: "RFP not found" });
+  const idx = rfps.findIndex(x => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "RFP not found" });
   const { key, done } = req.body || {};
   if (!key || typeof done !== "boolean") return res.status(400).json({ error: "Missing key or done" });
-  const idx = (r.checklist || []).findIndex(c => c.key === key);
-  if (idx === -1) r.checklist.push({ key, done });
-  else r.checklist[idx].done = done;
-  touch(r);
-  saveRfps(rfps);
-  auditLog(req.user?.sub || "user", "rfp.checklist", `${r.id}: ${key}=${done}`);
-  res.json({ ok: true, checklist: r.checklist });
+  const cidx = (rfps[idx].checklist || []).findIndex(c => c.key === key);
+  if (cidx === -1) {
+    rfps[idx].checklist = rfps[idx].checklist || [];
+    rfps[idx].checklist.push({ key, done });
+  } else {
+    rfps[idx].checklist[cidx].done = done;
+  }
+  rfps[idx].lastUpdated = new Date().toISOString();
+  writeJson("rfps.json", rfps);
+  auditLog(req.user?.sub || "user", "rfp.checklist", `RFP ${rfps[idx].id} checklist ${key} → ${done}`);
+  emitDash("rfp.checklist", { id: rfps[idx].id, key, done });
+  res.json({ ok: true });
 });
 
 // NEW: add attachment metadata (mock upload)
 router.post("/:id/attachments", requireAuth, (req, res) => {
   const rfps = loadRfps();
-  const r = rfps.find(x => x.id === req.params.id);
-  if (!r) return res.status(404).json({ error: "RFP not found" });
+  const idx = rfps.findIndex(x => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: "RFP not found" });
   const { name, type = "PDF", size = "0 KB" } = req.body || {};
   if (!name) return res.status(400).json({ error: "Missing attachment name" });
-  const a = { name, type, size, uploadedAt: new Date().toISOString() };
-  r.attachments.push(a);
-  touch(r);
-  saveRfps(rfps);
-  auditLog(req.user?.sub || "user", "rfp.attachment", `${r.id}: ${name}`);
-  res.status(201).json(a);
+  const att = { name, type, size, uploadedAt: new Date().toISOString() };
+  rfps[idx].attachments = rfps[idx].attachments || [];
+  rfps[idx].attachments.unshift(att);
+  rfps[idx].lastUpdated = new Date().toISOString();
+  writeJson("rfps.json", rfps);
+  auditLog(req.user?.sub || "user", "rfp.attachment", `RFP ${rfps[idx].id} attachment ${att.name} added`);
+  emitDash("rfp.attachment", { id: rfps[idx].id, name: att.name });
+  res.status(201).json(att);
 });
 
 export default router;

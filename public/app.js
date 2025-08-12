@@ -454,19 +454,19 @@ function goToSuggestion(item) {
 function sidebar() {
   const el = document.createElement("div");
   el.className = "sidebar";
-  
+
   const side = document.createElement("div");
   side.className = "card";
   side.innerHTML = `<div class="p"></div>`;
   const p = side.querySelector(".p");
-  
+
   // Dashboard link
   const dashboardLink = document.createElement("div");
   dashboardLink.className = "navlink";
   dashboardLink.innerHTML = `<span>🏠</span> Dashboard`;
   dashboardLink.onclick = () => setState({ view: "dashboard" });
   p.appendChild(dashboardLink);
-  
+
   // Clients link
   const clientsLink = document.createElement("div");
   clientsLink.className = "navlink";
@@ -474,7 +474,7 @@ function sidebar() {
   clientsLink.innerHTML = `<span>👥</span> Clients`;
   clientsLink.onclick = () => setState({ view: "clients" });
   p.appendChild(clientsLink);
-  
+
   // Mandates link
   const mandatesLink = document.createElement("div");
   mandatesLink.className = "navlink";
@@ -482,7 +482,7 @@ function sidebar() {
   mandatesLink.innerHTML = `<span>📈</span> Mandates`;
   mandatesLink.onclick = () => setState({ view: "mandates" });
   p.appendChild(mandatesLink);
-  
+
   // RFPs link
   const rfpsLink = document.createElement("div");
   rfpsLink.className = "navlink";
@@ -490,7 +490,7 @@ function sidebar() {
   rfpsLink.innerHTML = `<span>💼</span> RFPs`;
   rfpsLink.onclick = () => { state.view = "rfps"; render(); };
   p.appendChild(rfpsLink);
-  
+
   // Portfolio Risk link
   const riskLink = document.createElement("div");
   riskLink.className = "navlink";
@@ -498,7 +498,7 @@ function sidebar() {
   riskLink.innerHTML = `<span>🛡️</span> Portfolio Risk`;
   riskLink.onclick = () => setState({ view: "portfolio-risk" });
   p.appendChild(riskLink);
-  
+
   // Admin link (only show for Admins)
   (async () => {
     const me = await fetchMe();
@@ -511,7 +511,7 @@ function sidebar() {
       p.appendChild(adminLink);
     }
   })();
-  
+
   el.appendChild(side);
   return el;
 }
@@ -755,7 +755,7 @@ function DashboardMain() {
   drawRows();
   state.pendingOnly = false;
 
-  
+
 
   // === Enhanced Dashboard Layout ===
   (async () => {
@@ -776,7 +776,7 @@ function DashboardMain() {
           { factor: "Momentum", exposure: 0.05 }
         ]
       });
-      
+
       const pipelineCard = buildPipelineBox([
         { stage: "SunSuper RFP Draft", due: "2025-08-14", owner: "Legal", note: "Performance Review" },
         { stage: "QBE Insurance LDI Review", due: "2025-08-18", owner: "Portfolio", note: "Constraint updates" },
@@ -789,11 +789,11 @@ function DashboardMain() {
       enhancedGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(320px, 1fr))";
       enhancedGrid.style.gap = "16px";
       enhancedGrid.style.marginBottom = "16px";
-      
+
       enhancedGrid.appendChild(pipelineCard);
       enhancedGrid.appendChild(perfCard);
       enhancedGrid.appendChild(riskCard);
-      
+
       main.appendChild(enhancedGrid);
     } catch (e) {
       console.error("Dashboard enhancements failed", e);
@@ -888,9 +888,6 @@ function ViewReportDetail() {
   const root = document.createElement("div");
   root.className = "container";
   root.appendChild(topNav());
-
-  const r = state.selectedReport || { label:"Report", hint:"" };
-  const code = (r.hint || "").toString();
 
   const main = document.createElement("div");
   main.className = "card";
@@ -1294,6 +1291,22 @@ function buildBreachesPanel(mandate){
   return el;
 }
 
+function buildMandateOverview(mandateData) {
+  const el = document.createElement("div");
+  el.innerHTML = `
+    <div class="kv">
+      <dl>
+        <dt>Client</dt><dd>${mandateData.client || "-"}</dd>
+        <dt>Strategy</dt><dd>${mandateData.strategy || "-"}</dd>
+        <dt>AUM (AUD)</dt><dd>${mandateData.aumAud != null ? formatAUD(mandateData.aumAud) : "-"}</dd>
+        <dt>Status</dt><dd>${statusPill(mandateData.status || "Active")}</dd>
+        <dt>Last Update</dt><dd>${mandateData.lastUpdate || "-"}</dd>
+      </dl>
+    </div>
+  `;
+  return el;
+}
+
   return root;
 }
 
@@ -1538,12 +1551,12 @@ function ViewMandates() {
   tbody.addEventListener("click", (e) => {
     const mandateId = e.target?.dataset?.open;
     const client = e.target?.dataset?.client;
-    
+
     if (mandateId) {
-      setState({ view: "mandate", selectedMandate: { id: mandateId } });
+      setState({ view: "mandate", selectedMandate: id });
       return;
     }
-    
+
     if (client) {
       e.preventDefault();
       setState({ view: "client", selectedClient: client });
@@ -1561,8 +1574,8 @@ function ViewMandates() {
       await mandateCreate({ id, client, strategy, status: "Active", aumAud: 0 });
       await load();
       alert("Mandate created");
-    } catch (e) { 
-      alert(e.message || "Failed to create mandate"); 
+    } catch (e) {
+      alert(e.message || "Failed to create mandate");
     }
   };
 
@@ -1619,13 +1632,13 @@ function ViewMandateDetail() {
   async function renderTab(tabName) {
     content.innerHTML = `<div class="muted">Loading…</div>`;
     currentTab = tabName;
-    
+
     if (tabName === "breaches") {
       try {
         const { breaches } = await mandateBreaches(mandate.id);
         content.innerHTML = "";
         content.appendChild(buildBreachesPanel({ breaches }));
-        
+
         // Add event handlers for breach actions
         content.addEventListener("click", async (e) => {
           const breachId = e.target?.dataset?.ack || e.target?.dataset?.resolve;
@@ -1638,8 +1651,8 @@ function ViewMandateDetail() {
             const { breaches: updatedBreaches } = await mandateBreaches(mandate.id);
             content.innerHTML = "";
             content.appendChild(buildBreachesPanel({ breaches: updatedBreaches }));
-          } catch (err) { 
-            alert(err.message || "Update failed"); 
+          } catch (err) {
+            alert(err.message || "Update failed");
           }
         });
       } catch (e) {
@@ -1657,7 +1670,7 @@ function ViewMandateDetail() {
       }
       return;
     }
-    
+
     if (tabName === "overview") {
       updateForm();
       return;

@@ -13,6 +13,7 @@ import {
   updateBreachStatus,
   addBreach
 } from "../lib/mandatesStore.js";
+import { emitDash } from "../lib/events.js";
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.get("/", requireAuth, (_req, res) => {
 router.post("/", requireAuth, (req, res) => {
   try {
     const m = createMandate(req.body || {});
+    emitDash("mandate.create", { id: m.id, client: m.client });
     res.status(201).json(m);
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -42,6 +44,7 @@ router.get("/:id", requireAuth, (req, res) => {
 router.put("/:id", requireAuth, (req, res) => {
   try {
     const m = updateMandate(req.params.id, req.body || {});
+    emitDash("mandate.update", { id: m.id || req.params.id });
     res.json(m);
   } catch (e) {
     const code = e.message.includes("not found") ? 404 : 400;
@@ -53,6 +56,7 @@ router.put("/:id", requireAuth, (req, res) => {
 router.delete("/:id", requireAuth, (req, res) => {
   const ok = deleteMandate(req.params.id);
   if (!ok) return res.status(404).json({ error: "Mandate not found" });
+  emitDash("mandate.delete", { id: req.params.id });
   res.json({ ok: true });
 });
 
@@ -71,6 +75,7 @@ router.get("/:id/breaches", requireAuth, (req, res) => {
 router.post("/:id/breaches", requireAuth, (req, res) => {
   try {
     const b = addBreach(req.params.id, req.body || {});
+    emitDash("breach.create", { mandateId: req.params.id, breachId: b.id, severity: b.severity });
     res.status(201).json(b);
   } catch (e) {
     const code = e.message.includes("not found") ? 404 : 400;
@@ -82,6 +87,7 @@ router.post("/:id/breaches", requireAuth, (req, res) => {
 router.patch("/:id/breaches/:breachId", requireAuth, (req, res) => {
   try {
     const out = updateBreachStatus(req.params.id, req.params.breachId, req.body || {});
+    emitDash("breach.update", { mandateId: req.params.id, breachId: req.params.breachId, status: req.body?.status });
     res.json(out);
   } catch (e) {
     const code = e.message.includes("not found") ? 404 : 400;
