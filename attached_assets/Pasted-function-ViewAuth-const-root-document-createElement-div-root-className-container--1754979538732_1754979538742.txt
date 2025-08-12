@@ -1,0 +1,85 @@
+function ViewAuth() {
+  const root = document.createElement("div");
+  root.className = "container";
+
+  root.innerHTML = `
+    <div class="grid" style="grid-template-columns: 1fr; gap:16px;">
+      <!-- Sign in card -->
+      <div class="card"><div class="p">
+        <h2 style="margin-bottom:6px;">JPMorgan (Training)</h2>
+        <small class="muted">Employee Access Portal — Asset Management</small>
+        <div style="height:12px;"></div>
+        <div>
+          <label>Username or Email</label>
+          <input id="email" class="input" placeholder="firstname.lastname@company"/>
+        </div>
+        <div style="height:10px;"></div>
+        <div>
+          <div class="flex-between">
+            <label>Password</label>
+            <a class="link" id="forgot">Forgot password?</a>
+          </div>
+          <input id="password" class="input" type="password" placeholder="••••••••"/>
+        </div>
+        <div style="height:12px;"></div>
+        <div class="flex-between">
+          <label><input id="remember" type="checkbox" checked> Remember this device</label>
+          <a class="link" id="help">Need help?</a>
+        </div>
+        <div style="height:12px;"></div>
+        <button id="loginBtn" class="btn primary" style="width:100%;">Sign in</button>
+        <div style="height:8px;"></div>
+        <small class="muted">By signing in you agree to JPMorgan (Training)'s acceptable use & security policy.</small>
+      </div></div>
+
+      <!-- Security reminders -->
+      <div class="card"><div class="p">
+        <h3 style="margin-bottom:10px;">Security reminders</h3>
+        <ul style="padding-left:18px; line-height:1.7;">
+          <li>Only sign in on trusted domains.</li>
+          <li>Use a password manager and enable MFA.</li>
+          <li>Report suspicious messages to Security.</li>
+        </ul>
+      </div></div>
+
+      <!-- Single Sign-On -->
+      <div class="card"><div class="p">
+        <h3 style="margin-bottom:6px;">Single Sign-On</h3>
+        <small class="muted">Use your organization's identity provider.</small>
+        <div style="height:12px;"></div>
+        <div class="grid" style="grid-template-columns: 1fr; gap:10px; max-width:420px;">
+          <button class="btn" id="ssoSaml">🔑 SSO (SAML)</button>
+          <button class="btn" id="ssoOidc">🔑 SSO (OIDC)</button>
+        </div>
+        <div style="height:8px;"></div>
+        <small class="muted">Wire these to your auth backend (OAuth/OIDC, SAML).</small>
+      </div></div>
+
+      <div style="text-align:center;">
+        <small class="muted">© 2025 JPMorgan (Training). All rights reserved.</small>
+      </div>
+    </div>
+  `;
+
+  // Buttons
+  root.querySelector("#loginBtn").onclick = async () => {
+    const email = root.querySelector("#email").value.trim();
+    const password = root.querySelector("#password").value;
+    try {
+      const { token, user } = await api("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      setState({ token, user, view: "mfa" });
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+  root.querySelector("#ssoSaml").onclick = () => alert("SSO (SAML) is mocked in this training build.");
+  root.querySelector("#ssoOidc").onclick = () => alert("SSO (OIDC) is mocked in this training build.");
+  root.querySelector("#forgot").onclick = () => alert("Password reset is disabled in this training build.");
+  root.querySelector("#help").onclick = () => alert("Contact your internal IT helpdesk (mock).");
+
+  return root;
+}

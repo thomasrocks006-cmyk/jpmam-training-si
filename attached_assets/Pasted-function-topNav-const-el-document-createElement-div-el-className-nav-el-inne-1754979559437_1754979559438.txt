@@ -1,0 +1,113 @@
+function topNav() {
+  const el = document.createElement("div");
+  el.className = "nav";
+  el.innerHTML = `
+    <div class="container inner">
+      <div class="brand">JPMorgan (Training)</div>
+      <div class="searchbox">
+        <input id="search" placeholder="Search mandates, clients, reports… (press / to focus)" />
+        <ul id="suggest" class="suggest" style="display:none"></ul>
+      </div>
+      <div class="toolbar">
+        <button id="newBtn" class="btn">New</button>
+        <button id="notifBtn" class="btn">🔔</button>
+
+        <div class="menu-wrap">
+          <button id="youBtn" class="btn">You ▾</button>
+          <div id="youMenu" class="menu">
+            <button class="menu-item" data-action="profile">👤 Profile & Settings</button>
+            <button class="menu-item" data-action="security">🔐 Security</button>
+            <div class="menu-divider"></div>
+            <button class="menu-item" data-action="logout">🚪 Sign out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // --- search suggest logic (unchanged) ---
+  const input = el.querySelector("#search");
+  const suggest = el.querySelector("#suggest");
+
+  const allItems = [
+    { kind: "Client", label: "SunSuper", hint: "Pension – Australian Equity Core" },
+    { kind: "Client", label: "QBE Insurance", hint: "LDI / Liability-Aware Fixed Income" },
+    { kind: "Report", label: "Performance – Aus Core Bond (1Y/3Y/5Y)", hint: "PERF-ACB" },
+    { kind: "Report", label: "Attribution – Australian Equity Core", hint: "ATTR-AEC" },
+    { kind: "Report", label: "Risk – VaR & Tracking Error by Fund", hint: "RISK-VaR-TE" },
+    { kind: "Report", label: "Client SLA – Monthly", hint: "SLA-MONTHLY" },
+    { kind: "Report", label: "Compliance – Attestations Due", hint: "COMP-QTR" }
+  ];
+
+  function updateSuggest() {
+    const q = input.value.trim().toLowerCase();
+    const items = q ? allItems.filter((x)=>x.label.toLowerCase().includes(q)).slice(0,8) : [];
+    state.suggestions = items;
+    state.activeIndex = -1;
+    suggest.innerHTML = items.map((s, idx) => `
+      <li data-idx="${idx}" class="${idx===state.activeIndex?'active':''}">
+        <span class="row"><span class="badge">${s.kind}</span> ${s.label}</span>
+        <small class="muted">${s.hint || ""}</small>
+      </li>
+    `).join("");
+    suggest.style.display = items.length ? "block" : "none";
+    for (const li of suggest.querySelectorAll("li")) {
+      li.onmouseenter = () => { state.activeIndex = Number(li.dataset.idx); paintActive(); };
+      li.onmousedown = () => goToSuggestion(items[Number(li.dataset.idx)]);
+    }
+  }
+  function paintActive() {
+    for (const li of suggest.querySelectorAll("li")) li.classList.remove("active");
+    const active = suggest.querySelector(`li[data-idx="${state.activeIndex}"]`);
+    if (active) active.classList.add("active");
+  }
+  input.oninput = updateSuggest;
+  input.onkeydown = (e) => {
+    if (!state.suggestions.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); state.activeIndex = (state.activeIndex + 1) % state.suggestions.length; paintActive(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); state.activeIndex = (state.activeIndex - 1 + state.suggestions.length) % state.suggestions.length; paintActive(); }
+    else if (e.key === "Enter" && state.activeIndex >= 0) {
+      e.preventDefault();
+      goToSuggestion(state.suggestions[state.activeIndex]);
+      suggest.style.display = "none";
+    }
+  };
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== input) { e.preventDefault(); input.focus(); }
+  });
+
+  // --- YOU menu dropdown ---
+  const youBtn = el.querySelector("#youBtn");
+  const youMenu = el.querySelector("#youMenu");
+  let menuOpen = false;
+
+  function setMenu(open) {
+    menuOpen = open;
+    youMenu.classList.toggle("open", open);
+  }
+
+  youBtn.onclick = (e) => {
+    e.stopPropagation();
+    setMenu(!menuOpen);
+  };
+
+  youMenu.onclick = (e) => {
+    const action = e.target.closest(".menu-item")?.dataset?.action;
+    if (!action) return;
+    if (action === "profile") setState({ view: "profile" });
+    else if (action === "security") alert("Security center is mocked in this training build.");
+    else if (action === "logout") {
+      localStorage.removeItem("token");
+      setState({ token: null, user: null, view: "auth" });
+    }
+    setMenu(false);
+  };
+
+  // Close on outside click
+  document.addEventListener("click", (ev) => {
+    const within = ev.target === youBtn || youMenu.contains(ev.target);
+    if (!within) setMenu(false);
+  });
+
+  return el;
+}
