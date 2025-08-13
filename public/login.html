@@ -1,116 +1,63 @@
-
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>Sign in — JPMAM Training</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Log In — Standard ID</title>
     <link rel="stylesheet" href="/reset.css" />
     <link rel="stylesheet" href="/auth.css" />
     <script defer src="/app.js"></script>
   </head>
-  <body class="auth-body">
-    <main class="auth-wrap">
-      <section class="auth-card" role="form" aria-labelledby="auth-title">
-        <header class="auth-header">
-          <img src="/logo.svg" alt="JPMAM" class="auth-logo" />
-          <h1 id="auth-title" class="auth-title">Sign in</h1>
-          <p class="auth-subtitle">Use your work credentials to continue</p>
-        </header>
+  <body class="page-auth">
+    <!-- Brand bar -->
+    <div class="brand-bar">
+      <div class="brand">JPMorgan Chase &amp; Co.</div>
+    </div>
 
-        <form id="loginForm" class="auth-form">
-          <div class="field">
-            <label for="email" class="label">Email</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              inputmode="email"
-              autocomplete="email"
-              required
-              class="input"
-              placeholder="you@company.com"
-            />
-          </div>
+    <!-- Card -->
+    <main class="auth-main">
+      <section class="auth-card" role="form" aria-labelledby="title">
+        <h1 id="title" class="auth-h1">Log In</h1>
 
-          <div class="field">
-            <label for="password" class="label">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-              class="input"
-              placeholder="••••••••"
-            />
-          </div>
+        <form id="sidForm" class="form">
+          <label class="label" for="sid">Standard ID (SID)</label>
+          <input id="sid" name="sid" class="input" autocomplete="username" required />
 
-          <div class="field" style="margin-top: 8px;">
-            <label class="checkbox-label">
-              <input type="checkbox" id="remember" checked />
-              <span class="checkbox-text">Remember this device</span>
-            </label>
-          </div>
+          <button class="btn btn-primary" type="submit">Continue</button>
 
-          <button type="submit" class="btn btn-primary">Sign in</button>
+          <p class="aux">
+            <a class="link" href="/faq.html">Frequently Asked Questions</a>
+          </p>
 
-          <!-- This bar keeps 'Forgot password?' and 'Need help?' aligned nicely -->
-          <div class="auth-links" aria-label="Assistance links">
-            <a class="link" href="/forgot.html">Forgot password?</a>
-            <a class="link" href="mailto:it-support@yourcompany.com">Need help?</a>
-          </div>
-
-          <p id="authMsg" role="alert" class="auth-msg" hidden></p>
+          <p id="msg" class="msg" role="alert" hidden></p>
         </form>
       </section>
-
-      <footer class="auth-footnote">
-        <p>Authorized access only. Activity may be monitored.</p>
-      </footer>
     </main>
 
     <script>
       (function () {
-        const form = document.getElementById("loginForm");
-        const msg = document.getElementById("authMsg");
+        const f = document.getElementById("sidForm");
+        const msg = document.getElementById("msg");
 
-        function showMsg(text, type = "error") {
-          msg.textContent = text;
-          msg.className = "auth-msg " + (type === "ok" ? "ok" : "error");
+        function show(t, good=false){
+          msg.textContent = t;
+          msg.className = "msg " + (good ? "ok":"err");
           msg.hidden = false;
         }
 
-        form.addEventListener("submit", async (e) => {
+        f.addEventListener("submit", async (e) => {
           e.preventDefault();
           msg.hidden = true;
-
-          const payload = {
-            email: form.email.value.trim(),
-            password: form.password.value,
-          };
-
-          // basic front-end validation
-          if (!payload.email || !payload.password) {
-            showMsg("Please enter your email and password.");
-            return;
-          }
+          const sid = f.sid.value.trim();
+          if (!sid) return show("Please enter your Standard ID.");
 
           try {
-            const res = await window.api.post("/auth/login", payload);
-            if (res?.token) {
-              window.api.setToken(res.token);
-              showMsg("Signed in. Redirecting…", "ok");
-              // go to dashboard (adjust if your app uses a different path)
-              setTimeout(() => (location.href = "/"), 400);
-            } else {
-              showMsg("Unexpected response from server.");
-            }
+            const res = await window.api.post("/auth/identify", { sid });
+            // Pass SID to next step via query + sessionStorage
+            sessionStorage.setItem("sid", res.sid || sid);
+            location.href = "/login-password.html?sid=" + encodeURIComponent(res.sid || sid);
           } catch (err) {
-            showMsg(err.message || "Sign-in failed.");
+            show(err.message || "We couldn't find that SID.");
           }
         });
       })();
