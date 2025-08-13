@@ -66,7 +66,11 @@ app.use("/api/digests", digestsRoutes);
 // Initialize the notifier to listen for dashboard events
 initNotifier();
 
-// 3. Always serve index.html for unknown frontend routes (SPA fallback)
+// 3. Redirect root to login, serve index.html for authenticated routes
+app.get("/", (req, res) => {
+  res.redirect("/login.html");
+});
+
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) return next();
   res.sendFile(path.join(__dirname, "public", "index.html"));

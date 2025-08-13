@@ -2987,5 +2987,36 @@ async function render() {
   app.appendChild(view);
 }
 
-// initial
-render().catch(console.error);
+// Check authentication on load
+(async function initAuth() {
+  const token = window.api?.getToken();
+  if (!token) {
+    // No token, redirect to login
+    if (location.pathname !== "/login.html" && location.pathname !== "/login-password.html") {
+      location.href = "/login.html";
+      return;
+    }
+  } else {
+    // Has token, set initial state
+    try {
+      const user = await fetchMe();
+      if (user) {
+        setState({ token, user, view: "dashboard" });
+        loadDashboard();
+      } else {
+        // Invalid token
+        window.api.clearToken();
+        location.href = "/login.html";
+        return;
+      }
+    } catch (e) {
+      // Token validation failed
+      window.api.clearToken();
+      location.href = "/login.html";
+      return;
+    }
+  }
+  
+  // Render the app
+  render().catch(console.error);
+})();
