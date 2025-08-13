@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Log In — Standard ID</title>
+    <link rel="stylesheet" href="/reset.css" />
+    <link rel="stylesheet" href="/auth.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body class="page-auth">
+    <!-- Brand bar -->
+    <div class="brand-bar">
+      <div class="brand">JPMorgan Chase &amp; Co.</div>
+    </div>
+
+    <!-- Card -->
+    <main class="auth-main">
+      <section class="auth-card" role="form" aria-labelledby="title">
+        <h1 id="title" class="auth-h1">Log In</h1>
+
+        <form id="sidForm" class="form">
+          <label class="label" for="sid">Standard ID (SID)</label>
+          <input id="sid" name="sid" class="input" autocomplete="username" required />
+
+          <button class="btn btn-primary" type="submit">Continue</button>
+
+          <p class="aux">
+            <a class="link" href="/faq.html">Frequently Asked Questions</a>
+          </p>
+
+          <p id="msg" class="msg" role="alert" hidden></p>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        const f = document.getElementById("sidForm");
+        const msg = document.getElementById("msg");
+
+        function show(t, good=false){
+          msg.textContent = t;
+          msg.className = "msg " + (good ? "ok":"err");
+          msg.hidden = false;
+        }
+
+        f.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          msg.hidden = true;
+          const sid = f.sid.value.trim();
+          if (!sid) return show("Please enter your Standard ID.");
+
+          try {
+            const res = await window.api.post("/auth/identify", { sid });
+            // Pass SID to next step via query + sessionStorage
+            sessionStorage.setItem("sid", res.sid || sid);
+            location.href = "/login-password.html?sid=" + encodeURIComponent(res.sid || sid);
+          } catch (err) {
+            show(err.message || "We couldn't find that SID.");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
