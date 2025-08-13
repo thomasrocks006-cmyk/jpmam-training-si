@@ -25,5 +25,29 @@
       },
       "liveUpdates": true
     }
+  },
+  {
+    "email": "user.emp20251848@jpmorgan.com",
+    "password": "TempPassword123!",
+    "name": "Employee 20251848",
+    "dob": "1990-01-01",
+    "sex": "Unknown",
+    "role": "Employee",
+    "department": "Asset Management",
+    "employeeId": "EMP20251848",
+    "manager": "TBD",
+    "office": "Sydney",
+    "phone": "",
+    "mfaDevices": [],
+    "startDate": "2025-01-13",
+    "photo": "/avatar-placeholder.png",
+    "preferences": {
+      "emailAlerts": {
+        "approvals": true,
+        "breaches": true,
+        "rfpStages": true
+      },
+      "liveUpdates": true
+    }
   }
 ]
