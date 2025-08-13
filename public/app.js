@@ -1991,7 +1991,7 @@ function ViewMandates() {
     draw(list);
   };
 
-  // Event delegation for t// Global API helper
+  // Global API helper
 window.api = {
   async get(path, options = {}) {
     const token = localStorage.getItem("token");
@@ -2041,7 +2041,7 @@ window.api = {
   }
 };
 
-able clicks
+  // Event delegation for table clicks
   tbody.addEventListener("click", (e) => {
     const mandateId = e.target?.dataset?.open;
     const client = e.target?.dataset?.client;
