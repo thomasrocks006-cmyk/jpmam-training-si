@@ -1,7 +1,59 @@
 // Minimal front-end using vanilla JS + fetch to the API in this project.
 // Branding is mock: "JPMorgan (Training)" / "JPMorgan Asset Management (Training)".
+// Added default user EMP-2025-1847 and fixed API client definition
+// public/app.js
+(() => {
+  const API_BASE = window.API_BASE || `${location.origin}/api`;
 
-const API = window.API_BASE || "/api";
+  function setToken(token) { if (token) localStorage.setItem("token", token); }
+  function clearToken() { localStorage.removeItem("token"); }
+  function getToken() { return localStorage.getItem("token"); }
+
+  async function apiFetch(path, options = {}) {
+    const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json");
+
+    // Only set JSON content-type when not sending FormData
+    if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const tok = getToken();
+    if (tok) headers.set("Authorization", `Bearer ${tok}`);
+
+    const res = await fetch(url, { ...options, headers });
+    const isJson = res.headers.get("content-type")?.includes("application/json");
+    const data = isJson ? await res.json().catch(() => ({})) : await res.text();
+
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) clearToken();
+      const message = (data && (data.message || data.error)) || `Request failed (${res.status})`;
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  const api = {
+    base: API_BASE,
+    setToken,
+    clearToken,
+    get: (p, opts) => apiFetch(p, { method: "GET", ...(opts || {}) }),
+    post: (p, body, opts) =>
+      apiFetch(p, { method: "POST", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    put: (p, body, opts) =>
+      apiFetch(p, { method: "PUT", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    patch: (p, body, opts) =>
+      apiFetch(p, { method: "PATCH", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    del: (p, opts) => apiFetch(p, { method: "DELETE", ...(opts || {}) }),
+  };
+
+  // Expose
+  window.api = api;
+  window.API_BASE = API_BASE;
+  window.apiReady = Promise.resolve(api);
+})();
+
 
 // Helper formatting functions
 function fmtAUD(n) {
@@ -13,88 +65,75 @@ let CURRENT_USER = null;
 async function fetchMe(){
   if (CURRENT_USER) return CURRENT_USER;
   try {
-    CURRENT_USER = await api("/auth/me");
+    // Use the new api object to fetch user data
+    CURRENT_USER = await api.get("/auth/me");
   } catch { CURRENT_USER = null; }
   return CURRENT_USER;
 }
 
 // === Admin API helpers ===
-async function adminGetHealth(){ return await api("/admin/health"); }
-async function adminGetUsers(){ return await api("/admin/users"); }
+async function adminGetHealth(){ return await api.get("/admin/health"); }
+async function adminGetUsers(){ return await api.get("/admin/users"); }
 async function adminSetUserRole(email, role){
-  return await api(`/admin/users/${encodeURIComponent(email)}/role`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ role })
-  });
+  return await api.put(`/admin/users/${encodeURIComponent(email)}/role`, { role });
 }
-async function adminGetFlags(){ return await api("/admin/flags"); }
+async function adminGetFlags(){ return await api.get("/admin/flags"); }
 async function adminSetFlags(partial){
-  return await api("/admin/flags", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(partial || {})
-  });
+  return await api.put("/admin/flags", partial || {});
 }
-async function adminGetAudit(){ return await api("/admin/audit"); }
+async function adminGetAudit(){ return await api.get("/admin/audit"); }
 
 // === Notifications API ===
-async function notifList(){ return await api("/notifications"); }
+async function notifList(){ return await api.get("/notifications"); }
 async function notifRead(id){
-  return await api(`/notifications/${encodeURIComponent(id)}/read`, { method: "POST" });
+  return await api.post(`/notifications/${encodeURIComponent(id)}/read`);
 }
 async function notifReadAll(){
-  return await api("/notifications/read-all", { method: "POST" });
+  return await api.post("/notifications/read-all");
 }
 
 // === Digests API ===
 async function digestRun(mode="daily"){
-  return await api("/digests/run", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ mode }) });
+  return await api.post("/digests/run", { mode });
 }
-async function digestList(limit=5){ return await api(`/digests?limit=${limit}`); }
-async function digestGet(id){ return await api(`/digests/${encodeURIComponent(id)}`); }
+async function digestList(limit=5){ return await api.get(`/digests?limit=${limit}`); }
+async function digestGet(id){ return await api.get(`/digests/${encodeURIComponent(id)}`); }
 
 // === Profile & Settings API ===
-async function meGet(){ return await api("/users/me"); }
+async function meGet(){ return await api.get("/users/me"); }
 async function meUpdate(payload){
-  return await api("/users/me", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+  return await api.put("/users/me", payload);
 }
 async function meSetPassword(current, next){
-  return await api("/users/me/password", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ current, next }) });
+  return await api.put("/users/me/password", { current, next });
 }
 async function meSetPrefs(prefs){
-  return await api("/users/me/preferences", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(prefs) });
+  return await api.put("/users/me/preferences", prefs);
 }
 async function meUploadPhoto(dataUrl){
-  return await api("/users/me/photo", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dataUrl }) });
+  return await api.post("/users/me/photo", { dataUrl });
 }
 
 // === RFPs API ===
 async function rfpList(params = {}){
   const qs = new URLSearchParams(params).toString();
-  return await api(`/rfps${qs ? `?${qs}` : ""}`);
+  return await api.get(`/rfps${qs ? `?${qs}` : ""}`);
 }
-async function rfpGet(id){ return await api(`/rfps/${encodeURIComponent(id)}`); }
+async function rfpGet(id){ return await api.get(`/rfps/${encodeURIComponent(id)}`); }
 async function rfpCreate(payload){
-  return await api("/rfps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  return await api.post("/rfps", payload);
 }
 async function rfpSetStage(id, stage){
-  return await api(`/rfps/${encodeURIComponent(id)}/stage`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage }) });
+  return await api.put(`/rfps/${encodeURIComponent(id)}/stage`, { stage });
 }
 async function rfpAddNote(id, text){
-  return await api(`/rfps/${encodeURIComponent(id)}/notes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+  return await api.post(`/rfps/${encodeURIComponent(id)}/notes`, { text });
 }
 async function rfpToggleChecklist(id, key, done){
-  return await api(`/rfps/${encodeURIComponent(id)}/checklist`, {
-    method: "PUT", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ key, done })
-  });
+  return await api.put(`/rfps/${encodeURIComponent(id)}/checklist`, { key, done });
 }
 async function rfpAddAttachment(id, payload){
-  return await api(`/rfps/${encodeURIComponent(id)}/attachments`, {
-    method: "POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(payload)
-  });
+  return await api.post(`/rfps/${encodeURIComponent(id)}/attachments`, payload);
 }
 
 function fmtPct(n) {
@@ -156,14 +195,15 @@ function setState(next) {
   render().catch(console.error);
 }
 
-async function api(path, opts = {}) {
-  const headers = opts.headers || {};
-  if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
-  const res = await fetch(API + path, { ...opts, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
+// The api function is now part of the window.api object exposed above.
+// async function api(path, opts = {}) {
+//   const headers = opts.headers || {};
+//   if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
+//   const res = await fetch(API + path, { ...opts, headers });
+//   const data = await res.json().catch(() => ({}));
+//   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+//   return data;
+// }
 
 const FILTER_KEY = "approvalsFilter";
 function saveApprovalsFilter(v){ try{ localStorage.setItem(FILTER_KEY, v);}catch{} }
@@ -238,11 +278,9 @@ function ViewAuth() {
     const email = root.querySelector("#email").value.trim();
     const password = root.querySelector("#password").value;
     try {
-      const { token, user } = await api("/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
+      // Use the new api object for login
+      const { token, user } = await api.post("/auth/login", { email, password });
+      window.api.setToken(token); // Use api.setToken
       setState({ token, user, view: "mfa" });
     } catch (e) {
       alert(e.message);
@@ -281,7 +319,8 @@ function ViewMfa() {
 
 async function loadDashboard(openId, pendingOnly = false, openFirstPending = false) {
   try {
-    const approvals = await api("/approvals");
+    // Use the new api object to fetch approvals
+    const approvals = await api.get("/approvals");
     setState({ approvals, pendingOnly });
 
     setTimeout(() => {
@@ -446,7 +485,7 @@ function topNav() {
     if (action === "profile") setState({ view: "profile" });
     else if (action === "security") alert("Security center is mocked in this training build.");
     else if (action === "logout") {
-      localStorage.removeItem("token");
+      window.api.clearToken(); // Use api.clearToken
       setState({ token: null, user: null, view: "auth" });
     }
     setMenu(false);
@@ -486,7 +525,8 @@ function topNav() {
 
   async function refreshBell(){
     try {
-      const { notifications = [], unread = 0 } = await notifList();
+      // Use the new api object to fetch notifications
+      const { notifications = [], unread = 0 } = await api.get("/notifications");
       const badge = bellWrap.querySelector("#notifCount");
       badge.textContent = String(unread);
       badge.style.display = unread > 0 ? "" : "none";
@@ -676,7 +716,8 @@ function ApprovalRow(a) {
   `;
   tr.querySelector('[data-action="qa"]').onclick = async () => {
     try {
-      const updated = await api(`/approvals/${a.id}/approve`, { method: "POST" });
+      // Use api.post for the POST request
+      const updated = await api.post(`/approvals/${a.id}/approve`);
       const idx = state.approvals.findIndex(x => x.id === a.id);
       state.approvals[idx] = updated;
       render();
@@ -737,7 +778,8 @@ function approvalsDrawer() {
 
   d.querySelector("#approve").onclick = async () => {
     try {
-      const updated = await api(`/approvals/${a.id}/approve`, { method: "POST" });
+      // Use api.post for the POST request
+      const updated = await api.post(`/approvals/${a.id}/approve`);
       const idx = state.approvals.findIndex(x => x.id === a.id);
       state.approvals[idx] = updated;
       setState({ drawerItem: updated, drawerTab: "audit" });
@@ -746,10 +788,9 @@ function approvalsDrawer() {
 
   d.querySelector("#changes").onclick = async () => {
     try {
-      const ev = await api(`/approvals/${a.id}/audit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "Requested changes", meta: "Assigned to Legal QA" })
+      // Use api.post for the POST request
+      const ev = await api.post(`/approvals/${a.id}/audit`, {
+        action: "Requested changes", meta: "Assigned to Legal QA"
       });
       alert(`Added audit: ${ev.action}`);
       const idx = state.approvals.findIndex(x => x.id === a.id);
@@ -887,7 +928,6 @@ function DashboardMain() {
   select.onchange = drawRows;
   drawRows();
   state.pendingOnly = false;
-
 
 
   // === Dashboard SSE (with fallback) ===
@@ -1053,12 +1093,13 @@ function ViewReportDetail() {
 
   const main = document.createElement("div");
   main.className = "card";
-  main.innerHTML = `<div class="p"><h2>Report: ${r.label}</h2><div id="body"><small class="muted">Loading…</small></div></div>`;
+  main.innerHTML = `<div class="p"><h2>Report: ${state.selectedReport?.label}</h2><div id="body"><small class="muted">Loading…</small></div></div>`;
   root.appendChild(main);
 
   (async()=>{
     try{
-      const data = await api(`/reports/${encodeURIComponent(code)}`);
+      // Use api.get for fetching report details
+      const data = await api.get(`/reports/${encodeURIComponent(state.selectedReport.label)}`);
       const body = main.querySelector("#body");
       body.innerHTML = `
         <div class="row">
@@ -1453,7 +1494,8 @@ function ViewClients() {
   const q = card.querySelector("#q");
 
   async function load() {
-    const list = await api("/clients");
+    // Use api.get to fetch clients
+    const list = await api.get("/clients");
     state._clientsList = list;
     draw(list);
   }
@@ -1462,7 +1504,7 @@ function ViewClients() {
     list.forEach(c => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td><a class="link" href="#">${c.name}</a></td>
+        <td><a class="link" href="#" data-client="${c.name}">${c.name}</a></td>
         <td>${c.type}</td>
         <td>${(c.strategies||[]).join(", ")}</td>
         <td>${formatAUD(c.aumAud)}</td>
@@ -1527,7 +1569,8 @@ function ViewClientDetail() {
 
   (async()=>{
     try {
-      data = await api(`/clients/${encodeURIComponent(name)}`);
+      // Use api.get to fetch client details
+      data = await api.get(`/clients/${encodeURIComponent(name)}`);
       drawOverview();
     } catch(e) {
       content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
@@ -1604,7 +1647,7 @@ function ViewClientDetail() {
       </div>
       <div style="height:10px;"></div>
       <table class="table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Size</th><th>Uploaded</th></tr></thead>
-        <tbody id="docsBody">${data.docs.map(d=>rowDoc(d)).join("")}</tbody>
+        <tbody id="docsBody">${data.docs.map(rowDoc).join("")}</tbody>
       </table>
     `;
     content.querySelector("#addDoc").onclick = async () => {
@@ -1612,11 +1655,8 @@ function ViewClientDetail() {
       const type = content.querySelector("#docType").value;
       if (!name) return alert("Enter a document name");
       try {
-        const d = await api(`/clients/${encodeURIComponent(state.selectedClient)}/docs`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, type, size: "—" })
-        });
+        // Use api.post for adding document
+        const d = await api.post(`/clients/${encodeURIComponent(state.selectedClient)}/docs`, { name, type, size: "—" });
         data.docs.unshift(d);
         content.querySelector("#docsBody").insertAdjacentHTML("afterbegin", rowDoc(d));
         content.querySelector("#docName").value = "";
@@ -1632,18 +1672,15 @@ function ViewClientDetail() {
       </div>
       <div style="height:10px;"></div>
       <div id="notesList">
-        ${data.notes.map(n=>noteHtml(n)).join("")}
+        ${data.notes.map(noteHtml).join("")}
       </div>
     `;
     content.querySelector("#addNote").onclick = async () => {
       const text = content.querySelector("#note").value.trim();
       if (!text) return;
       try {
-        const n = await api(`/clients/${encodeURIComponent(state.selectedClient)}/notes`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text })
-        });
+        // Use api.post for adding a note
+        const n = await api.post(`/clients/${encodeURIComponent(state.selectedClient)}/notes`, { text });
         data.notes.unshift(n);
         content.querySelector("#notesList").insertAdjacentHTML("afterbegin", noteHtml(n));
         content.querySelector("#note").value = "";
@@ -1676,24 +1713,22 @@ function ViewClientDetail() {
   function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // === Mandates API ===
-async function mandatesList(){ return await api("/mandates"); }
-async function mandateGet(id){ return await api(`/mandates/${encodeURIComponent(id)}`); }
+async function mandatesList(){ return await api.get("/mandates"); }
+async function mandateGet(id){ return await api.get(`/mandates/${encodeURIComponent(id)}`); }
 async function mandateCreate(payload){
-  return await api("/mandates", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+  return await api.post("/mandates", payload);
 }
 async function mandateUpdate(id, payload){
-  return await api(`/mandates/${encodeURIComponent(id)}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+  return await api.put(`/mandates/${encodeURIComponent(id)}`, payload);
 }
 async function mandateDelete(id){
-  return await api(`/mandates/${encodeURIComponent(id)}`, { method: "DELETE" });
+  return await api.del(`/mandates/${encodeURIComponent(id)}`);
 }
 async function mandateBreaches(id){
-  return await api(`/mandates/${encodeURIComponent(id)}/breaches`);
+  return await api.get(`/mandates/${encodeURIComponent(id)}/breaches`);
 }
 async function mandatePatchBreach(id, breachId, payload){
-  return await api(`/mandates/${encodeURIComponent(id)}/breaches/${encodeURIComponent(breachId)}`, {
-    method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)
-  });
+  return await api.patch(`/mandates/${encodeURIComponent(id)}/breaches/${encodeURIComponent(breachId)}`, payload);
 }
 
 // === Mandate Breaches helpers ===
@@ -1792,14 +1827,14 @@ function buildPipelineBox(pipeline = []) {
     if (!st) return;
     // Simple routing: RFP -> Clients; Packs/Reports -> Reports page, etc.
     if (/RFP/i.test(st)) { state.view = "clients"; render(); }
-    else { state.view = "report"; state.reportCode = "SLA-MONTHLY"; render(); }
+    else { state.view = "report"; state.reportCode = "PERF-ACB"; render(); }
   });
   return card;
 }
 
 async function buildPerformanceCard({ limit = 3 } = {}){
   try {
-    const data = await api("/clients");
+    const data = await api.get("/clients");
     const rows = (data || [])
       .map(c => ({
         name: c.name,
@@ -1991,63 +2026,13 @@ function ViewMandates() {
     draw(list);
   };
 
-  // Global API helper
-window.api = {
-  async get(path, options = {}) {
-    const token = localStorage.getItem("token");
-    const headers = { ...options.headers };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    
-    const res = await fetch(`/api${path}`, { ...options, headers });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Network error" }));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    return res.json();
-  },
-
-  async post(path, data, options = {}) {
-    const token = localStorage.getItem("token");
-    const headers = { 
-      "Content-Type": "application/json",
-      ...options.headers 
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    const res = await fetch(`/api${path}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(data),
-      ...options
-    });
-    
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "Network error" }));
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    return res.json();
-  },
-
-  setToken(token) {
-    localStorage.setItem("token", token);
-  },
-
-  getToken() {
-    return localStorage.getItem("token");
-  },
-
-  clearToken() {
-    localStorage.removeItem("token");
-  }
-};
-
   // Event delegation for table clicks
   tbody.addEventListener("click", (e) => {
     const mandateId = e.target?.dataset?.open;
     const client = e.target?.dataset?.client;
 
     if (mandateId) {
-      setState({ view: "mandate", selectedMandate: id });
+      setState({ view: "mandate", selectedMandate: mandateId });
       return;
     }
 
@@ -2096,22 +2081,20 @@ function ViewMandateDetail() {
         <h2>Mandate: ${mandate?.id || "New"} ${mandate?.editMode ? "(Edit)" : ""}</h2>
         <button id="back" class="btn">← All Mandates</button>
       </div>
-      <div style="height:10px;"></div>
-      ${!mandate?.editMode ? `
-        <div class="tabs">
-          <div class="tab active" data-tab="overview">Overview</div>
-          <div class="tab" data-tab="breaches">Breaches</div>
-        </div>
-      ` : ''}
-      <div class="section" id="content"><small class="muted">Loading…</small></div>
-      ${mandate?.editMode ? `
-        <div class="section">
+      <div class="sep" style="margin:10px 0;"></div>
+      <div id="meta" class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px;"></div>
+
+      <div id="tabs" style="margin-top:10px;">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="breaches">Breaches</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+      <div class="section">
           <div class="row">
             <button id="save" class="btn primary">Save Mandate</button>
             <button id="cancel" class="btn">Cancel</button>
           </div>
         </div>
-      ` : ''}
     </div>
   `;
   wrap.appendChild(card);
@@ -2129,7 +2112,8 @@ function ViewMandateDetail() {
 
     if (tabName === "breaches") {
       try {
-        const { breaches } = await mandateBreaches(mandate.id);
+        // Use api.get to fetch breaches
+        const { breaches } = await api.get(`/mandates/${mandate.id}/breaches`);
         content.innerHTML = "";
         content.appendChild(buildBreachesPanel({ breaches }));
 
@@ -2139,10 +2123,11 @@ function ViewMandateDetail() {
           if (!breachId) return;
           try {
             const status = e.target.dataset.ack ? "Acknowledged" : "Resolved";
-            await mandatePatchBreach(mandate.id, breachId, { status });
+            // Use api.patch for the PATCH request
+            await api.patch(`/mandates/${mandate.id}/breaches/${breachId}`, { status });
             alert(`Breach ${status}`);
             // Refresh the breaches view
-            const { breaches: updatedBreaches } = await mandateBreaches(mandate.id);
+            const { breaches: updatedBreaches } = await api.get(`/mandates/${mandate.id}/breaches`);
             content.innerHTML = "";
             content.appendChild(buildBreachesPanel({ breaches: updatedBreaches }));
           } catch (err) {
@@ -2219,7 +2204,7 @@ function ViewMandateDetail() {
     // Fetch actual data and render overview tab
     (async()=>{
       try {
-        mandateData = await api(`/mandates/${mandate.id}`);
+        mandateData = await api.get(`/mandates/${mandate.id}`);
         Object.assign(formData, mandateData);
         renderTab("overview");
       } catch(e) {
@@ -2230,7 +2215,7 @@ function ViewMandateDetail() {
     // Edit mode
     (async()=>{
       try {
-        const data = await api(`/mandates/${mandate.id}`);
+        const data = await api.get(`/mandates/${mandate.id}`);
         Object.assign(formData, data);
         updateForm();
       } catch(e) {
@@ -2244,11 +2229,7 @@ function ViewMandateDetail() {
       const method = mandate.id ? "PUT" : "POST";
       const path = mandate.id ? `/mandates/${mandate.id}` : "/mandates";
       try {
-        const updated = await api(path, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData)
-        });
+        const updated = await api[method.toLowerCase()](path, formData);
         alert("Mandate saved successfully!");
         setState({ view: "mandates", selectedMandate: null, editMode: false });
       } catch (e) {
@@ -2262,9 +2243,6 @@ function ViewMandateDetail() {
 
   return root;
 }
-
-
-
 
 
 function openApprovalById(id) {
@@ -2528,6 +2506,7 @@ function ViewRfps(){
   async function refresh(){
     rows.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
     try {
+      // Use api.get to fetch RFPs
       const { rfps=[] } = await rfpList({ q: q.value, stage: stage.value });
       rows.innerHTML = rfps.map(r => `
         <tr>
@@ -2554,7 +2533,10 @@ function ViewRfps(){
     const client = id ? prompt("Client (e.g., SunSuper):") : null;
     const title = client ? prompt("Title:") : null;
     if (!id || !client || !title) return;
-    try { await rfpCreate({ id, client, title }); await refresh(); }
+    try {
+      // Use api.post to create RFP
+      await rfpCreate({ id, client, title }); await refresh();
+    }
     catch(e){ alert(e.message || "Failed to create RFP"); }
   };
 
@@ -2616,6 +2598,7 @@ function ViewRfpDetail(){
 
   async function load(){
     try {
+      // Use api.get to fetch RFP details
       const r = await rfpGet(state.rfpId);
       rid.textContent = r.id;
       meta.innerHTML = `
@@ -2660,6 +2643,7 @@ function ViewRfpDetail(){
           body.querySelector("#addNote").onclick = async () => {
             const t = body.querySelector("#noteText").value.trim();
             if (!t) return;
+            // Use api.post to add a note
             const note = await rfpAddNote(r.id, t);
             const list = body.querySelector("#notesList");
             list.insertAdjacentHTML("afterbegin",
@@ -2695,6 +2679,7 @@ function ViewRfpDetail(){
             if (!key) return;
             const done = !!e.target.checked;
             try {
+              // Use api.put for the PUT request
               await rfpToggleChecklist(r.id, key, done);
               toast("Checklist updated");
             } catch (err) {
@@ -2731,6 +2716,7 @@ function ViewRfpDetail(){
             const size = body.querySelector("#attSize").value.trim() || "—";
             if (!name) return alert("Enter a file name");
             try {
+              // Use api.post for adding attachment
               const a = await rfpAddAttachment(r.id, { name, type, size });
               rows.insertAdjacentHTML("afterbegin",
                 `<tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`
@@ -2759,6 +2745,7 @@ function ViewRfpDetail(){
       // Save stage
       card.querySelector("#saveStage").onclick = async () => {
         const val = card.querySelector("#stageSel").value;
+        // Use api.put for the PUT request
         await rfpSetStage(r.id, val);
         toast("RFP stage updated");
         state.view = "rfp"; render();
@@ -2821,7 +2808,8 @@ function ViewPortfolioRisk() {
 
   (async () => {
     try {
-      const data = await api("/reports/RISK-PORTFOLIO");
+      // Use api.get to fetch portfolio risk data
+      const data = await api.get("/reports/RISK-PORTFOLIO");
       const m = data.metrics || {};
       const sectors = data.sectorExposures || [];
       const factors = data.factorExposures || [];
@@ -3016,7 +3004,7 @@ async function render() {
       return;
     }
   }
-  
+
   // Render the app
   render().catch(console.error);
 })();
