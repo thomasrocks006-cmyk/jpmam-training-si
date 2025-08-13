@@ -38,6 +38,7 @@
     base: API_BASE,
     setToken,
     clearToken,
+    getToken,
     get: (p, opts) => apiFetch(p, { method: "GET", ...(opts || {}) }),
     post: (p, body, opts) =>
       apiFetch(p, { method: "POST", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
@@ -54,10 +55,17 @@
   window.apiReady = Promise.resolve(api);
 })();
 
-
 // Helper formatting functions
 function fmtAUD(n) {
   return new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0 }).format(n);
+}
+
+function fmtPct(n) {
+  return `${Number(n).toFixed(2)}%`;
+}
+
+function fmtBps(n) {
+  return `${Number(n).toFixed(0)} bps`;
 }
 
 // --- Current user helper (cached) ---
@@ -65,9 +73,10 @@ let CURRENT_USER = null;
 async function fetchMe(){
   if (CURRENT_USER) return CURRENT_USER;
   try {
-    // Use the new api object to fetch user data
     CURRENT_USER = await api.get("/auth/me");
-  } catch { CURRENT_USER = null; }
+  } catch { 
+    CURRENT_USER = null; 
+  }
   return CURRENT_USER;
 }
 
@@ -136,12 +145,23 @@ async function rfpAddAttachment(id, payload){
   return await api.post(`/rfps/${encodeURIComponent(id)}/attachments`, payload);
 }
 
-function fmtPct(n) {
-  return `${Number(n).toFixed(2)}%`;
+// === Mandate API ===
+async function mandatesList(){ return await api.get("/mandates"); }
+async function mandateGet(id){ return await api.get(`/mandates/${encodeURIComponent(id)}`); }
+async function mandateCreate(payload){
+  return await api.post("/mandates", payload);
 }
-
-function fmtBps(n) {
-  return `${Number(n).toFixed(0)} bps`;
+async function mandateUpdate(id, payload){
+  return await api.put(`/mandates/${encodeURIComponent(id)}`, payload);
+}
+async function mandateDelete(id){
+  return await api.del(`/mandates/${encodeURIComponent(id)}`);
+}
+async function mandateBreaches(id){
+  return await api.get(`/mandates/${encodeURIComponent(id)}/breaches`);
+}
+async function mandatePatchBreach(id, breachId, payload){
+  return await api.patch(`/mandates/${encodeURIComponent(id)}/breaches/${encodeURIComponent(breachId)}`, payload);
 }
 
 // Toasts
@@ -194,16 +214,6 @@ function setState(next) {
   Object.assign(state, next);
   render().catch(console.error);
 }
-
-// The api function is now part of the window.api object exposed above.
-// async function api(path, opts = {}) {
-//   const headers = opts.headers || {};
-//   if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
-//   const res = await fetch(API + path, { ...opts, headers });
-//   const data = await res.json().catch(() => ({}));
-//   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-//   return data;
-// }
 
 const FILTER_KEY = "approvalsFilter";
 function saveApprovalsFilter(v){ try{ localStorage.setItem(FILTER_KEY, v);}catch{} }
@@ -278,9 +288,8 @@ function ViewAuth() {
     const email = root.querySelector("#email").value.trim();
     const password = root.querySelector("#password").value;
     try {
-      // Use the new api object for login
       const { token, user } = await api.post("/auth/login", { email, password });
-      window.api.setToken(token); // Use api.setToken
+      window.api.setToken(token);
       setState({ token, user, view: "mfa" });
     } catch (e) {
       alert(e.message);
@@ -319,7 +328,6 @@ function ViewMfa() {
 
 async function loadDashboard(openId, pendingOnly = false, openFirstPending = false) {
   try {
-    // Use the new api object to fetch approvals
     const approvals = await api.get("/approvals");
     setState({ approvals, pendingOnly });
 
@@ -399,7 +407,7 @@ function topNav() {
     </div>
   `;
 
-  // --- search suggest logic (unchanged) ---
+  // --- search suggest logic ---
   const input = el.querySelector("#search");
   const suggest = el.querySelector("#suggest");
 
@@ -485,7 +493,7 @@ function topNav() {
     if (action === "profile") setState({ view: "profile" });
     else if (action === "security") alert("Security center is mocked in this training build.");
     else if (action === "logout") {
-      window.api.clearToken(); // Use api.clearToken
+      window.api.clearToken();
       setState({ token: null, user: null, view: "auth" });
     }
     setMenu(false);
@@ -501,7 +509,7 @@ function topNav() {
   const approvalsBtn = el.querySelector("#approvalsBtn");
   const approvalsBadge = el.querySelector("#approvalsBadge");
 
-  // Compute pending count from current state (if not yet loaded, badge stays hidden)
+  // Compute pending count from current state
   function updateApprovalsBadge() {
     const count = (state.approvals || []).filter(a => a.status === "Pending").length;
     if (count > 0) {
@@ -513,8 +521,6 @@ function topNav() {
   }
   updateApprovalsBadge();
 
-  // Recompute whenever we re-render topNav (render() recreates DOM) — nothing else needed.
-
   // Click → jump to Dashboard pending
   approvalsBtn.onclick = () => {
     openApprovalsPending();
@@ -525,7 +531,6 @@ function topNav() {
 
   async function refreshBell(){
     try {
-      // Use the new api object to fetch notifications
       const { notifications = [], unread = 0 } = await api.get("/notifications");
       const badge = bellWrap.querySelector("#notifCount");
       badge.textContent = String(unread);
@@ -548,7 +553,6 @@ function topNav() {
   // Initialize bell
   (async function initBell(){
     await refreshBell();
-    // live via SSE (if enabled in profile)
     try {
       const me = await fetchMe();
       if (me?.preferences?.liveUpdates !== false) {
@@ -600,7 +604,7 @@ function topNav() {
     try { await notifReadAll(); await refreshBell(); } catch {}
   };
 
-  // --- NEW: Brand/Title as Back to Dashboard link ---
+  // --- Brand/Title as Back to Dashboard link ---
   const brand = el.querySelector(".brand");
   brand.style.cursor = "pointer";
   brand.onclick = () => { state.view = "dashboard"; render(); };
@@ -716,7 +720,6 @@ function ApprovalRow(a) {
   `;
   tr.querySelector('[data-action="qa"]').onclick = async () => {
     try {
-      // Use api.post for the POST request
       const updated = await api.post(`/approvals/${a.id}/approve`);
       const idx = state.approvals.findIndex(x => x.id === a.id);
       state.approvals[idx] = updated;
@@ -778,7 +781,6 @@ function approvalsDrawer() {
 
   d.querySelector("#approve").onclick = async () => {
     try {
-      // Use api.post for the POST request
       const updated = await api.post(`/approvals/${a.id}/approve`);
       const idx = state.approvals.findIndex(x => x.id === a.id);
       state.approvals[idx] = updated;
@@ -788,7 +790,6 @@ function approvalsDrawer() {
 
   d.querySelector("#changes").onclick = async () => {
     try {
-      // Use api.post for the POST request
       const ev = await api.post(`/approvals/${a.id}/audit`, {
         action: "Requested changes", meta: "Assigned to Legal QA"
       });
@@ -851,7 +852,7 @@ function DashboardMain() {
 
   // Main content area
   const main = document.createElement("div");
-  main.className = "grid"; // Changed from "main" to "grid" as per new structure
+  main.className = "grid";
   wrap.appendChild(main);
 
   // KPIs
@@ -929,8 +930,7 @@ function DashboardMain() {
   drawRows();
   state.pendingOnly = false;
 
-
-  // === Dashboard SSE (with fallback) ===
+  // Dashboard SSE
   let dashES = null;
   function connectDashStream({ onEvent }){
     try {
@@ -939,30 +939,25 @@ function DashboardMain() {
       dashES.addEventListener("dash", (e) => {
         try { const evt = JSON.parse(e.data); onEvent?.(evt); } catch {}
       });
-      dashES.addEventListener("ping", () => {/* keepalive */});
-      dashES.onerror = () => { /* fallback reconnect after delay */ setTimeout(()=>connectDashStream({ onEvent }), 5000); };
-    } catch {
-      // no SSE support: ignore; UI will rely on polling/refresh buttons
-    }
+      dashES.addEventListener("ping", () => {});
+      dashES.onerror = () => { setTimeout(()=>connectDashStream({ onEvent }), 5000); };
+    } catch {}
   }
 
-  // === Enhanced Dashboard Layout ===
+  // Enhanced Dashboard Layout
   (async () => {
     try {
-      // Check user's live updates preference
       const me = await fetchMe();
-      const allowLive = me?.preferences?.liveUpdates !== false; // default ON
+      const allowLive = me?.preferences?.liveUpdates !== false;
       if (allowLive) {
         connectDashStream({
           onEvent: (evt) => {
-            // Refresh the dashboard when events occur
             console.log("Dashboard event:", evt);
             render();
           }
         });
       }
 
-      // Use the new compact builders
       const perfCard = await buildPerformanceCard({ limit: 3 });
       const riskCard = buildRiskOverviewCompact({
         trackingErrorBps: 120,
@@ -985,7 +980,6 @@ function DashboardMain() {
         { stage: "Pacific Rail Pension Discovery", due: "2025-08-20", owner: "Sales", note: "Real Assets mandate" }
       ]);
 
-      // Simple grid layout
       const enhancedGrid = document.createElement("div");
       enhancedGrid.className = "grid";
       enhancedGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(320px, 1fr))";
@@ -1002,26 +996,6 @@ function DashboardMain() {
     }
   })();
 
-  // Original content below, appended after the new grid structure is added
-
-  // --- Original content starts here ---
-
-  // Client & Portfolio Activity (simple) - Moved inside the async IIFE for structure
-  // const activity = document.createElement("div");
-  // activity.className = "card";
-  // activity.innerHTML = `
-  //   <div class="p">
-  //     <h3>Client & Portfolio Activity</h3>
-  //     <ul>
-  //       <li>Client meeting set: SunSuper (Performance Review) · MEET-SUSU</li>
-  //       <li>RFP draft uploaded for QBE Insurance LDI · RFP-QBE</li>
-  //       <li>Quarterly factsheet generated: Aus Core Bond · FS-ACB</li>
-  //       <li>Mandate change request: Real Assets tilt · MCR-RA</li>
-  //     </ul>
-  //   </div>
-  // `;
-  // main.appendChild(activity);
-
   // Alerts
   const alerts = document.createElement("div");
   alerts.className = "card";
@@ -1033,87 +1007,1281 @@ function DashboardMain() {
   `;
   main.appendChild(alerts);
 
-  // Pipeline / Performance / Risk
-  const ppr = document.createElement("div");
-  ppr.className = "grid";
-  ppr.style.gridTemplateColumns = "repeat(3,minmax(0,1fr))";
-  ppr.innerHTML = `
-    <div class="card"><div class="p">
-      <h3>Mandate Pipeline</h3>
-      <ul>
-        <li><strong>SunSuper</strong> · Australian Equity Core — <span class="muted">RFP Draft · Due 14 Aug</span></li>
-        <li><strong>QBE Insurance</strong> · LDI / FI — <span class="muted">Legal Review · Due 12 Aug</span></li>
-        <li><strong>Pacific Rail Pension</strong> · Real Assets — <span class="muted">Discovery · Due 20 Aug</span></li>
-      </ul>
-    </div></div>
-    <div class="card"><div class="p">
-      <h3>Performance Snapshot</h3>
-      <ul>
-        <li>Aus Core Bond vs AusBond Composite — <strong>+62 bps (1Y)</strong></li>
-        <li>Australian Equity Core vs S&P/ASX 200 — <strong>+48 bps (3Y ann.)</strong></li>
-        <li>Real Assets Income — <strong>+5.1% (YTD)</strong></li>
-      </ul>
-    </div></div>
-    <div class="card"><div class="p">
-      <h3>Risk Overview</h3>
-      <ul>
-        <li>Tracking Error (Australian Equity Core): <strong>2.1%</strong></li>
-        <li>Ex-ante VaR (Aus Core Bond): <strong>0.9%</strong></li>
-        <li>Top Factor: <strong>Duration (FI)</strong></li>
-      </ul>
-    </div></div>
-  `;
-  main.appendChild(ppr);
-
-  // Client Tasks
-  const tasks = document.createElement("div");
-  tasks.className = "card";
-  tasks.innerHTML = `
-    <div class="p">
-      <h3>Client Tasks</h3>
-      <ul>
-        <li>SunSuper — Upload Q2 performance deck <span class="muted">(owner: You · due Fri)</span></li>
-        <li>QBE Insurance — Confirm fee schedule redlines <span class="muted">(owner: Legal · due Wed)</span></li>
-        <li>SunSuper — SLA report sign-off <span class="muted">(owner: Reporting · due Mon)</span></li>
-      </ul>
-    </div>
-  `;
-  main.appendChild(tasks);
-
   // Drawer
   root.appendChild(approvalsDrawer());
 
   return root;
 }
 
-function ViewReportDetail() {
+// Helper functions for building cards
+function buildPipelineBox(pipeline = []) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Mandate Pipeline</div>
+      <div class="pipeline-box"></div>
+    </div>
+  `;
+  const box = card.querySelector(".pipeline-box");
+  if (!pipeline.length){
+    box.innerHTML = `<div class="subtle">No pipeline items.</div>`;
+    return card;
+  }
+  pipeline.forEach((step, i) => {
+    const { stage, due, owner, note } = step;
+    const el = document.createElement("div");
+    el.className = "pipeline-step" + (i === 0 ? " active" : "");
+    el.innerHTML = `
+      <div class="pipeline-dot" aria-hidden="true"></div>
+      <div>
+        <div><b>${stage || "Stage"}</b></div>
+        <div class="pipeline-meta">
+          ${due ? `<span class="badge">${new Date(due).toLocaleDateString()}</span>` : ""}
+          ${owner ? `<span class="badge">${owner}</span>` : ""}
+        </div>
+        ${note ? `<div class="pipeline-note">${note}</div>` : ""}
+      </div>
+      <div><button class="btn-ghost" data-stage="${stage || ""}">Open</button></div>
+    `;
+    box.appendChild(el);
+  });
+  box.addEventListener("click", (e) => {
+    const st = e.target?.dataset?.stage;
+    if (!st) return;
+    if (/RFP/i.test(st)) { state.view = "clients"; render(); }
+    else { state.view = "report"; state.reportCode = "PERF-ACB"; render(); }
+  });
+  return card;
+}
+
+async function buildPerformanceCard({ limit = 3 } = {}){
+  try {
+    const data = await api.get("/clients");
+    const rows = (data || [])
+      .map(c => ({
+        name: c.name,
+        perf: c.perfSpark || [1, 2, 1.5, 3, 2.5, 4, 3.5, 5, 4.5, 6, 5.5, 7],
+        ytd: c.returns?.ytdPct ?? Math.random() * 10 - 5
+      }))
+      .slice(0, limit);
+
+    const card = document.createElement("div");
+    card.className = "card perf-compact";
+    card.innerHTML = `
+      <div class="p">
+        <div class="flex-between">
+          <div class="section-title">Performance Snapshot</div>
+          <div class="perf-actions">
+            <button class="btn-ghost" id="perf-all">View all</button>
+          </div>
+        </div>
+        <table class="table">
+          <thead><tr><th>Client</th><th style="width:170px;">Last 12m</th><th style="width:90px;">YTD</th><th style="width:90px;"></th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${r.name}</td>
+                <td class="spark-cell">${sparkline(r.perf)}</td>
+                <td>${r.ytd != null ? fmtPct(r.ytd) : "-"}</td>
+                <td><button class="btn-ghost" data-name="${r.name}">Open</button></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="subtle sep"></div>
+        <small class="subtle">Compact view shows top ${limit}. Use "View all" for the full list.</small>
+      </div>
+    `;
+
+    const tb = card.querySelector("tbody");
+    if (tb) {
+      tb.addEventListener("click", (e) => {
+        const name = e.target?.dataset?.name;
+        if (!name) return;
+        state.view = "report";
+        state.reportCode = "PERF-ACB";
+        render().catch(console.error);
+      });
+    }
+
+    const perfAllBtn = card.querySelector("#perf-all");
+    if (perfAllBtn) {
+      perfAllBtn.onclick = () => {
+        state.view = "clients";
+        render().catch(console.error);
+      };
+    }
+    return card;
+  } catch (e) {
+    console.error("Performance card error:", e);
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="p">
+        <div class="section-title">Performance Snapshot</div>
+        <div class="subtle">Mock performance data - training build</div>
+      </div>
+    `;
+    return card;
+  }
+}
+
+function buildRiskOverviewCompact(risk){
+  const card = document.createElement("div");
+  card.className = "card";
+  const te = Number(risk?.trackingErrorBps ?? 0);
+  const tePct = Math.min(1, Math.abs(te) / 400);
+  const var1 = Number(risk?.var95_oneDayPct ?? 0);
+  const var10 = Number(risk?.var95_tenDayPct ?? 0);
+  const beta = Number(risk?.beta ?? 1);
+  const ir = Number(risk?.infoRatio ?? 0);
+  const act = Number(risk?.activeSharePct ?? 0);
+
+  card.innerHTML = `
+    <div class="p">
+      <div class="section-title">Risk Overview</div>
+      <div class="risk-compact">
+        <div class="risk-stat">
+          <div class="risk-label">Tracking Error</div>
+          <div class="risk-value">${fmtBps(te)}</div>
+          <div class="risk-mini">Budget: 0–250 bps</div>
+          <div class="risk-bar" style="margin-top:8px;"><span style="right:${(100 - tePct*100).toFixed(1)}%"></span></div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">VaR (95%)</div>
+          <div class="risk-value">${var1.toFixed(1)}% (1-day)</div>
+          <div class="risk-mini">${var10.toFixed(1)}% (10-day)</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Beta</div>
+          <div class="risk-value">${beta.toFixed(2)}</div>
+          <div class="risk-mini">Info Ratio ${ir.toFixed(2)}</div>
+        </div>
+        <div class="risk-stat">
+          <div class="risk-label">Active Share</div>
+          <div class="risk-value">${act.toFixed(0)}%</div>
+          <div class="risk-mini">vs benchmark</div>
+        </div>
+      </div>
+
+      <details class="risk-collapsible">
+        <summary class="subtle">Factor Exposures (compact)</summary>
+        <div style="margin-top:8px;">
+          <table class="table">
+            <thead><tr><th>Factor</th><th style="width:80px;">Exposure</th></tr></thead>
+            <tbody>
+              ${(risk?.factors || []).slice(0,8).map(f => `
+                <tr>
+                  <td>${f.factor}</td>
+                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#ef4444'}">${f.exposure.toFixed(2)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  `;
+  return card;
+}
+
+function ViewClients() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Clients</h2>
+        <div class="row">
+          <input id="q" class="input" placeholder="Filter clients…" style="width:240px;">
+          <button id="refresh" class="btn">Refresh</button>
+        </div>
+      </div>
+      <div style="height:12px;"></div>
+      <div style="overflow:auto;">
+        <table class="table" id="tbl">
+          <thead><tr>
+            <th>Name</th><th>Type</th><th>Strategies</th><th>AUM (AUD)</th><th>Fee (bps)</th><th>Last Review</th><th>Next Review</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  root.appendChild(card);
+
+  const tbody = card.querySelector("tbody");
+  const q = card.querySelector("#q");
+
+  async function load() {
+    const list = await api.get("/clients");
+    state._clientsList = list;
+    draw(list);
+  }
+  function draw(list) {
+    tbody.innerHTML = "";
+    list.forEach(c => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><a class="link" href="#" data-client="${c.name}">${c.name}</a></td>
+        <td>${c.type}</td>
+        <td>${(c.strategies||[]).join(", ")}</td>
+        <td>${formatAUD(c.aumAud)}</td>
+        <td>${c.feeBps}</td>
+        <td>${c.lastReview}</td>
+        <td>${c.nextReview}</td>
+      `;
+      tr.querySelector("a").onclick = (e) => { e.preventDefault(); setState({ view: "client", selectedClient: c.name }); };
+      tbody.appendChild(tr);
+    });
+  }
+
+  q.oninput = () => {
+    const term = q.value.trim().toLowerCase();
+    const list = (state._clientsList || []).filter(c =>
+      [c.name, c.type, (c.strategies||[]).join(" ")].some(s => s.toLowerCase().includes(term))
+    );
+    draw(list);
+  };
+
+  card.querySelector("#refresh").onclick = load;
+  load().catch(e => alert(e.message));
+  return root;
+}
+
+function ViewClientDetail() {
+  const name = state.selectedClient;
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "grid";
+  wrap.style.gridTemplateColumns = "1fr";
+  root.appendChild(wrap);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Client: ${name}</h2>
+        <button id="back" class="btn">← All Clients</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="holdings">Holdings</div>
+        <div class="tab" data-tab="documents">Documents</div>
+        <div class="tab" data-tab="notes">Notes</div>
+      </div>
+      <div class="section" id="content"><small class="muted">Loading…</small></div>
+    </div>
+  `;
+  wrap.appendChild(card);
+
+  card.querySelector("#back").onclick = () => setState({ view: "clients" });
+
+  let data = null;
+  let tab = "overview";
+  const content = card.querySelector("#content");
+
+  (async()=>{
+    try {
+      data = await api.get(`/clients/${encodeURIComponent(name)}`);
+      drawOverview();
+    } catch(e) {
+      content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+    }
+  })();
+
+  function setTab(next) {
+    tab = next;
+    for (const t of card.querySelectorAll(".tab")) t.classList.toggle("active", t.dataset.tab === tab);
+    if (tab === "overview") drawOverview();
+    if (tab === "holdings") drawHoldings();
+    if (tab === "documents") drawDocuments();
+    if (tab === "notes") drawNotes();
+  }
+  card.querySelectorAll(".tab").forEach(t => t.onclick = () => setTab(t.dataset.tab));
+
+  function drawOverview() {
+    content.innerHTML = `
+      <div class="grid" style="grid-template-columns: repeat(4,minmax(0,1fr));">
+        ${kpiHtml("AUM (AUD)", formatAUD(data.aumAud))}
+        ${kpiHtml("Fee (bps)", data.feeBps)}
+        ${kpiHtml("Benchmark", data.benchmark)}
+        ${kpiHtml("SLA", data.sla)}
+      </div>
+      <div style="height:14px;"></div>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; align-items:start;">
+        <div class="card"><div class="p">
+          <h3>Contacts</h3>
+          <ul>${data.contacts.map(c=>`<li><strong>${c.name}</strong> — ${c.role}<br><small class="muted">${c.email} · ${c.phone}</small></li>`).join("")}</ul>
+        </div></div>
+        <div class="card"><div class="p">
+          <h3>Key Dates</h3>
+          <ul>
+            <li>Last Review: <strong>${data.lastReview}</strong></li>
+            <li>Next Review: <strong>${data.nextReview}</strong></li>
+            <li>Upcoming meeting: <strong>${(data.meetings[0] && new Date(data.meetings[0].when).toLocaleString()) || "—"}</strong></li>
+          </ul>
+        </div></div>
+      </div>
+      <div style="height:14px;"></div>
+      <div class="card"><div class="p">
+        <h3>Performance (relative, mock)</h3>
+        ${sparkline(data.perfSpark)}
+        <small class="muted">12-point series; illustrative only.</small>
+      </div></div>
+    `;
+  }
+
+  function drawHoldings() {
+    content.innerHTML = `
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap:16px;">
+        <div>
+          <h3>Top 10 Positions</h3>
+          <table class="table"><thead><tr><th>Name</th><th>Weight %</th></tr></thead>
+            <tbody>${data.holdingsTop10.map(h=>`<tr><td>${h.name}</td><td>${h.weight.toFixed(1)}</td></tr>`).join("")}</tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Sector Weights</h3>
+          <table class="table"><thead><tr><th>Sector</th><th>Weight %</th></tr></thead>
+            <tbody>${data.sectorWeights.map(s=>`<tr><td>${s.sector}</td><td>${s.weight.toFixed(1)}</td></tr>`).join("")}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function drawDocuments() {
+    content.innerHTML = `
+      <div class="row">
+        <input id="docName" class="input" placeholder="Document name (e.g., Q3-Perf-Deck.pdf)" style="max-width:360px;">
+        <select id="docType" class="input" style="max-width:120px;"><option>PDF</option><option>XLSX</option><option>CSV</option><option>ZIP</option></select>
+        <button id="addDoc" class="btn">Add</button>
+      </div>
+      <div style="height:10px;"></div>
+      <table class="table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Size</th><th>Uploaded</th></tr></thead>
+        <tbody id="docsBody">${data.docs.map(rowDoc).join("")}</tbody>
+      </table>
+    `;
+    content.querySelector("#addDoc").onclick = async () => {
+      const name = content.querySelector("#docName").value.trim();
+      const type = content.querySelector("#docType").value;
+      if (!name) return alert("Enter a document name");
+      try {
+        const d = await api.post(`/clients/${encodeURIComponent(state.selectedClient)}/docs`, { name, type, size: "—" });
+        data.docs.unshift(d);
+        content.querySelector("#docsBody").insertAdjacentHTML("afterbegin", rowDoc(d));
+        content.querySelector("#docName").value = "";
+      } catch(e) { alert(e.message); }
+    };
+  }
+
+  function drawNotes() {
+    content.innerHTML = `
+      <div class="row">
+        <input id="note" class="input" placeholder="Add a note… (saved to audit trail)" />
+        <button id="addNote" class="btn">Add note</button>
+      </div>
+      <div style="height:10px;"></div>
+      <div id="notesList">
+        ${data.notes.map(noteHtml).join("")}
+      </div>
+    `;
+    content.querySelector("#addNote").onclick = async () => {
+      const text = content.querySelector("#note").value.trim();
+      if (!text) return;
+      try {
+        const n = await api.post(`/clients/${encodeURIComponent(state.selectedClient)}/notes`, { text });
+        data.notes.unshift(n);
+        content.querySelector("#notesList").insertAdjacentHTML("afterbegin", noteHtml(n));
+        content.querySelector("#note").value = "";
+      } catch(e) { alert(e.message); }
+    };
+  }
+
+  // helpers
+  function kpiHtml(label, val) {
+    return `<div class="card"><div class="p"><strong>${val}</strong><small class="muted">${label}</small></div></div>`;
+  }
+  function rowDoc(d) {
+    return `<tr><td>${d.id}</td><td>${d.name}</td><td>${d.type}</td><td>${d.size}</td><td>${new Date(d.uploadedAt).toLocaleString()}</td></tr>`;
+  }
+  function noteHtml(n) {
+    return `<div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
+      <div><strong>${new Date(n.ts).toLocaleString()}</strong> — <span class="muted">${n.user}</span></div>
+      <div>${escapeHtml(n.text)}</div>
+    </div>`;
+  }
+  function sparkline(arr) {
+    const w = 160, h = 40, pad = 4;
+    const min = Math.min(...arr), max = Math.max(...arr);
+    const nx = (i) => pad + (i * (w - 2*pad)) / (arr.length - 1 || 1);
+    const ny = (v) => h - pad - ((v - min) * (h - 2*pad)) / ((max - min) || 1);
+    const d = arr.map((v, i) => `${i===0?"M":"L"} ${nx(i).toFixed(1)} ${ny(v).toFixed(1)}`).join(" ");
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="sparkline"><path d="${d}" fill="none" stroke="#111827" stroke-width="1.5"/></svg>`;
+  }
+  function escapeHtml(s) { 
+    return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); 
+  }
+
+  return root;
+}
+
+function ViewMandates() {
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandates</h2>
+        <div class="row">
+          <input id="q" class="input" placeholder="Filter mandates…" style="width:240px;">
+          <button id="refresh" class="btn">Refresh</button>
+          <button id="newMandateBtn" class="btn primary">New Mandate</button>
+        </div>
+      </div>
+      <div style="height:12px;"></div>
+      <div style="overflow:auto;">
+        <table class="table" id="tbl">
+          <thead><tr>
+            <th>ID</th><th>Client</th><th>Strategy</th><th>AUM (AUD)</th><th>Status</th><th>Last Update</th><th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  root.appendChild(card);
+
+  const tbody = card.querySelector("tbody");
+  const q = card.querySelector("#q");
+
+  function renderMandatesTable(rows){
+    return rows.map(r => {
+      const id = r.id || "-";
+      const client = r.client || "-";
+      const strategy = r.strategy || "-";
+      const aum = r.aumAud != null ? formatAUD(r.aumAud) : "—";
+      const status = r.status || "—";
+      const updated = r.lastUpdate ? new Date(r.lastUpdate).toLocaleDateString() : "—";
+      return `
+        <tr>
+          <td><strong>${id}</strong></td>
+          <td><a class="link" href="#" data-client="${client}">${client}</a></td>
+          <td>${strategy}</td>
+          <td>${aum}</td>
+          <td><span class="pill">${status}</span></td>
+          <td>${updated}</td>
+          <td style="text-align:right;">
+            <button class="btn btn-small" data-open="${id}">Open</button>
+          </td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="7" class="muted">No mandates.</td></tr>`;
+  }
+
+  async function load() {
+    const list = await mandatesList();
+    state._mandatesList = list;
+    draw(list);
+  }
+
+  function draw(list) {
+    tbody.innerHTML = renderMandatesTable(list);
+  }
+
+  q.oninput = () => {
+    const term = q.value.trim().toLowerCase();
+    const list = (state._mandatesList || []).filter(m =>
+      [m.id.toString(), m.client, m.strategy].some(s => s.toLowerCase().includes(term))
+    );
+    draw(list);
+  };
+
+  // Event delegation for table clicks
+  tbody.addEventListener("click", (e) => {
+    const mandateId = e.target?.dataset?.open;
+    const client = e.target?.dataset?.client;
+
+    if (mandateId) {
+      setState({ view: "mandate", selectedMandate: mandateId });
+      return;
+    }
+
+    if (client) {
+      e.preventDefault();
+      setState({ view: "client", selectedClient: client });
+      return;
+    }
+  });
+
+  card.querySelector("#refresh").onclick = load;
+  card.querySelector("#newMandateBtn").onclick = async () => {
+    const id = prompt("Mandate ID (e.g., M-AUS-EQ-SS-002):");
+    const client = id ? prompt("Client:") : null;
+    const strategy = client ? prompt("Strategy:") : null;
+    if (!id || !client || !strategy) return;
+    try {
+      await mandateCreate({ id, client, strategy, status: "Active", aumAud: 0 });
+      await load();
+      alert("Mandate created");
+    } catch (e) {
+      alert(e.message || "Failed to create mandate");
+    }
+  };
+
+  load().catch(e => alert(e.message));
+  return root;
+}
+
+function ViewMandateDetail() {
+  const mandate = state.selectedMandate;
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>Mandate: ${mandate?.id || "New"} ${mandate?.editMode ? "(Edit)" : ""}</h2>
+        <button class="btn" id="back">← All Mandates</button>
+      </div>
+      <div class="sep" style="margin:10px 0;"></div>
+      <div id="meta" class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px;"></div>
+
+      <div id="tabs" style="margin-top:10px;">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="breaches">Breaches</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+      <div class="section">
+          <div class="row">
+            <button id="save" class="btn primary">Save Mandate</button>
+            <button id="cancel" class="btn">Cancel</button>
+          </div>
+        </div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  card.querySelector("#back").onclick = () => setState({ view: "mandates" });
+
+  const content = card.querySelector("#content");
+  let formData = mandate ? { ...mandate } : {};
+  let currentTab = "overview";
+  let mandateData = null;
+
+  async function renderTab(tabName) {
+    content.innerHTML = `<div class="muted">Loading…</div>`;
+    currentTab = tabName;
+
+    if (tabName === "breaches") {
+      try {
+        const { breaches } = await api.get(`/mandates/${mandate.id}/breaches`);
+        content.innerHTML = "";
+        content.appendChild(buildBreachesPanel({ breaches }));
+
+        // Add event handlers for breach actions
+        content.addEventListener("click", async (e) => {
+          const breachId = e.target?.dataset?.ack || e.target?.dataset?.resolve;
+          if (!breachId) return;
+          try {
+            const status = e.target.dataset.ack ? "Acknowledged" : "Resolved";
+            await api.patch(`/mandates/${mandate.id}/breaches/${breachId}`, { status });
+            alert(`Breach ${status}`);
+            // Refresh the breaches view
+            const { breaches: updatedBreaches } = await api.get(`/mandates/${mandate.id}/breaches`);
+            content.innerHTML = "";
+            content.appendChild(buildBreachesPanel({ breaches: updatedBreaches }));
+          } catch (err) {
+            alert(err.message || "Update failed");
+          }
+        });
+      } catch (e) {
+        content.innerHTML = `<span style="color:#b91c1c">Error loading breaches: ${e.message}</span>`;
+      }
+    } else if (tabName === "overview") {
+      try {
+        if (!mandateData) {
+          mandateData = await fetchMandateDetail(mandate.id);
+        }
+        content.innerHTML = "";
+        content.appendChild(buildMandateOverview(mandateData));
+      } catch (e) {
+        content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+      }
+      return;
+    }
+
+    if (tabName === "overview") {
+      updateForm();
+      return;
+    }
+  }
+
+  // Tab click handler
+  if (!mandate?.editMode) {
+    card.addEventListener("click", (e) => {
+      const t = e.target.closest(".tab");
+      if (!t) return;
+      card.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      renderTab(t.dataset.tab);
+    });
+  }
+
+  function updateForm() {
+    content.innerHTML = `
+      <div class="kv">
+        <dl>
+          <dt>Client</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="client" value="${escapeHtml(formData.client || '')}"/>` : mandate.client}</dd>
+          <dt>Strategy</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="strategy" value="${escapeHtml(formData.strategy || '')}"/>` : mandate.strategy}</dd>
+          <dt>AUM (AUD)</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="aumAud" value="${formData.aumAud || 0}"/>` : formatAUD(mandate.aumAud)}</dd>
+          <dt>Status</dt>
+          <dd>${mandate?.editMode ? `
+            <select class="input" id="status">
+              <option ${formData.status === 'Active' ? 'selected' : ''}>Active</option>
+              <option ${formData.status === 'Pending' ? 'selected' : ''}>Pending</option>
+              <option ${formData.status === 'Terminated' ? 'selected' : ''}>Terminated</option>
+            </select>` : statusPill(mandate.status)}</dd>
+          <dt>Last Update</dt>
+          <dd>${mandate?.editMode ? `<input class="input" id="lastUpdate" value="${formData.lastUpdate || ''}"/>` : mandate.lastUpdate}</dd>
+        </dl>
+      </div>
+    `;
+    if (mandate?.editMode) {
+      content.querySelectorAll("input, select").forEach(el => {
+        el.oninput = () => { formData[el.id] = el.value; };
+      });
+    }
+  }
+
+  if (!mandate) {
+    // Mock data for new mandate
+    formData = { id: Date.now(), client: "", strategy: "", aumAud: 0, status: "Pending", lastUpdate: new Date().toISOString().split('T')[0] };
+    updateForm();
+  } else if (!mandate.editMode) {
+    // Fetch actual data and render overview tab
+    (async()=>{
+      try {
+        mandateData = await api.get(`/mandates/${mandate.id}`);
+        Object.assign(formData, mandateData);
+        renderTab("overview");
+      } catch(e) {
+        content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+      }
+    })();
+  } else {
+    // Edit mode
+    (async()=>{
+      try {
+        const data = await api.get(`/mandates/${mandate.id}`);
+        Object.assign(formData, data);
+        updateForm();
+      } catch(e) {
+        content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+      }
+    })();
+  }
+
+  if (mandate?.editMode) {
+    card.querySelector("#save").onclick = async () => {
+      const method = mandate.id ? "PUT" : "POST";
+      const path = mandate.id ? `/mandates/${mandate.id}` : "/mandates";
+      try {
+        const updated = await api[method.toLowerCase()](path, formData);
+        alert("Mandate saved successfully!");
+        setState({ view: "mandates", selectedMandate: null, editMode: false });
+      } catch (e) {
+        alert(`Error saving mandate: ${e.message}`);
+      }
+    };
+    card.querySelector("#cancel").onclick = () => {
+      setState({ view: "mandates", selectedMandate: null, editMode: false });
+    };
+  }
+
+  return root;
+}
+
+// === Mandate Breaches helpers ===
+async function fetchMandateDetail(id){
+  return await mandateGet(id);
+}
+
+function buildBreachesPanel(mandate){
+  const breaches = mandate.breaches || [];
+  const el = document.createElement("div");
+  el.innerHTML = breaches.length ? `
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width:140px;">Breach ID</th>
+          <th>Type</th>
+          <th style="width:110px;">Severity</th>
+          <th style="width:100px;">Status</th>
+          <th style="width:120px;">Opened</th>
+          <th style="width:120px;">Resolved</th>
+          <th>Note</th>
+          <th style="width:150px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breaches.map(b => `
+          <tr>
+            <td>${b.id}</td>
+            <td>${b.type}</td>
+            <td><span class="badge ${String(b.severity||'').toLowerCase()}">${b.severity || '-'}</span></td>
+            <td><span class="pill ${String(b.status||'').toLowerCase()}">${b.status || '-'}</span></td>
+            <td>${b.opened ? new Date(b.opened).toLocaleDateString() : '-'}</td>
+            <td>${b.resolved ? new Date(b.resolved).toLocaleDateString() : '-'}</td>
+            <td>${b.note || ''}</td>
+            <td>
+              ${b.status === "Open" ? `<button class="btn-small" data-ack="${b.id}">Acknowledge</button>` : ""}
+              ${b.status === "Acknowledged" ? `<button class="btn-small" data-resolve="${b.id}">Resolve</button>` : ""}
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  ` : `<div class="muted">✅ No breaches for this mandate.</div>`;
+  return el;
+}
+
+function buildMandateOverview(mandateData) {
+  const el = document.createElement("div");
+  el.innerHTML = `
+    <div class="kv">
+      <dl>
+        <dt>Client</dt><dd>${mandateData.client || "-"}</dd>
+        <dt>Strategy</dt><dd>${mandateData.strategy || "-"}</dd>
+        <dt>AUM (AUD)</dt><dd>${mandateData.aumAud != null ? formatAUD(mandateData.aumAud) : "-"}</dd>
+        <dt>Status</dt><dd>${statusPill(mandateData.status || "Active")}</dd>
+        <dt>Last Update</dt><dd>${mandateData.lastUpdate || "-"}</dd>
+      </dl>
+    </div>
+  `;
+  return el;
+}
+
+function ViewRfps(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  // Main
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>RFPs</h2>
+        <div class="inline">
+          <input id="q" placeholder="Search id/title…" style="width: 220px;">
+          <select id="stage">
+            <option value="">All stages</option>
+            ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option>${s}</option>`).join("")}
+          </select>
+          <button class="btn" id="new">New RFP</button>
+        </div>
+      </div>
+      <div style="height:10px;"></div>
+      <table class="table">
+        <thead>
+          <tr><th style="width:160px;">ID</th><th>Title</th><th style="width:160px;">Client</th><th style="width:150px;">Stage</th><th style="width:120px;">Due</th><th style="width:120px;"></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const rows = card.querySelector("#rows");
+  const q = card.querySelector("#q");
+  const stage = card.querySelector("#stage");
+
+  async function refresh(){
+    rows.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+    try {
+      const { rfps=[] } = await rfpList({ q: q.value, stage: stage.value });
+      rows.innerHTML = rfps.map(r => `
+        <tr>
+          <td>${r.id}</td>
+          <td>${r.title}</td>
+          <td>${r.client}</td>
+          <td><span class="pill">${r.stage}</span></td>
+          <td>${r.due || "-"}</td>
+          <td><button class="btn-ghost" data-id="${r.id}">Open</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="6" class="muted">No RFPs</td></tr>`;
+    } catch(e){
+      rows.innerHTML = `<tr><td colspan="6" style="color:#b91c1c">${e.message}</td></tr>`;
+    }
+  }
+
+  q.oninput = () => refresh();
+  stage.onchange = () => refresh();
+  refresh();
+
+  // New RFP (tiny inline dialog)
+  card.querySelector("#new").onclick = async () => {
+    const id = prompt("RFP ID (e.g., RFP-SS-24Q3):");
+    const client = id ? prompt("Client (e.g., SunSuper):") : null;
+    const title = client ? prompt("Title:") : null;
+    if (!id || !client || !title) return;
+    try {
+      await rfpCreate({ id, client, title }); await refresh();
+    }
+    catch(e){ alert(e.message || "Failed to create RFP"); }
+  };
+
+  // Open detail
+  rows.addEventListener("click", async (e) => {
+    const id = e.target?.dataset?.id;
+    if (!id) return;
+    state.view = "rfp";
+    state.rfpId = id;
+    render();
+  });
+
+  return root;
+}
+
+function ViewRfpDetail(){
+  const root = document.createElement("div");
+  root.className = "container";
+  root.appendChild(topNav());
+
+  const wrap = document.createElement("div");
+  wrap.className = "layout";
+  root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div class="flex-between">
+        <h2>RFP: <span id="rid"></span></h2>
+        <button class="btn" id="back">← All RFPs</button>
+      </div>
+      <div class="sep" style="margin:10px 0;"></div>
+      <div id="meta" class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px;"></div>
+
+      <div id="tabs" style="margin-top:10px;">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="notes">Notes</div>
+        <div class="tab" data-tab="checklist">Checklist</div>
+        <div class="tab" data-tab="attachments">Attachments</div>
+      </div>
+      <div id="body" style="margin-top:10px;"></div>
+      <div class="section">
+          <div class="row">
+            <button id="save" class="btn primary">Save Mandate</button>
+            <button id="cancel" class="btn">Cancel</button>
+          </div>
+        </div>
+    </div>
+  `;
+  main.appendChild(card);
+
+  const rid = card.querySelector("#rid");
+  const meta = card.querySelector("#meta");
+  const body = card.querySelector("#body");
+  const tabs = card.querySelector("#tabs");
+
+  card.querySelector("#back").onclick = () => { state.view = "rfps"; render(); };
+
+  async function load(){
+    try {
+      const r = await rfpGet(state.rfpId);
+      rid.textContent = r.id;
+      meta.innerHTML = `
+        <div class="card"><div class="p"><b>Title</b><div>${r.title}</div></div></div>
+        <div class="card"><div class="p"><b>Client</b><div>${r.client}</div></div></div>
+        <div class="card"><div class="p"><b>Owner</b><div>${r.owner}</div></div></div>
+        <div class="card"><div class="p"><b>Stage</b>
+          <div class="inline">
+            <select id="stageSel">
+              ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option ${s===r.stage?"selected":""}>${s}</option>`).join("")}
+            </select>
+            <button class="btn" id="saveStage">Save</button>
+          </div>
+        </div></div>
+        <div class="card"><div class="p"><b>Due</b><div>${r.due || "-"}</div></div></div>
+        <div class="card"><div class="p"><b>Updated</b><div>${new Date(r.lastUpdated).toLocaleString()}</div></div></div>
+      `;
+
+      async function renderTab(name){
+        if (name === "overview") {
+          body.innerHTML = `
+            <div class="muted">Use the controls above to manage stage. Other sections are in the tabs.</div>
+          `;
+          return;
+        }
+        if (name === "notes"){
+          body.innerHTML = `
+            <div class="inline">
+              <input id="noteText" placeholder="Add a note..." style="width: 60%;">
+              <button class="btn" id="addNote">Add</button>
+            </div>
+            <div style="height:8px;"></div>
+            <div id="notesList"></div>
+          `;
+          const list = body.querySelector("#notesList");
+          list.innerHTML = (r.notes || []).map(n => `
+            <div class="card"><div class="p">
+              <div class="muted">${new Date(n.ts).toLocaleString()} — ${n.user}</div>
+              <div>${n.text}</div>
+            </div></div>
+          `).join("") || `<div class="muted">No notes.</div>`;
+          body.querySelector("#addNote").onclick = async () => {
+            const t = body.querySelector("#noteText").value.trim();
+            if (!t) return;
+            const note = await rfpAddNote(r.id, t);
+            const list = body.querySelector("#notesList");
+            list.insertAdjacentHTML("afterbegin",
+              `<div class="card"><div class="p">
+                <div class="muted">${new Date(note.ts).toLocaleString()} — ${note.user}</div>
+                <div>${note.text}</div>
+              </div></div>`
+            );
+            body.querySelector("#noteText").value = "";
+            toast("Note added");
+          };
+          return;
+        }
+        if (name === "checklist"){
+          body.innerHTML = `
+            <table class="table">
+              <thead><tr><th>Item</th><th style="width:120px;">Done</th></tr></thead>
+              <tbody>${(r.checklist || []).map(c => `
+                <tr>
+                  <td>${c.key}</td>
+                  <td>
+                    <label class="switch">
+                      <input type="checkbox" data-key="${c.key}" ${c.done ? "checked" : ""}/>
+                      <span class="slider"></span>
+                    </label>
+                  </td>
+                </tr>`).join("")}
+              </tbody>
+            </table>
+          `;
+          body.querySelector("tbody").addEventListener("change", async (e) => {
+            const key = e.target?.dataset?.key;
+            if (!key) return;
+            const done = !!e.target.checked;
+            try {
+              await rfpToggleChecklist(r.id, key, done);
+              toast("Checklist updated");
+            } catch (err) {
+              alert(err.message || "Failed to update");
+              e.target.checked = !done; // revert UI on error
+            }
+          });
+          return;
+        }
+        if (name === "attachments"){
+          body.innerHTML = `
+            <div class="inline">
+              <input id="attName" placeholder="File name (e.g., Perf-Appendix.pdf)" style="width: 280px;">
+              <select id="attType">
+                <option>PDF</option><option>DOCX</option><option>XLSX</option><option>PPTX</option>
+              </select>
+              <input id="attSize" placeholder="Size (e.g., 1.2 MB)" style="width: 120px;">
+              <button class="btn" id="addAtt">Add</button>
+            </div>
+            <div style="height:10px;"></div>
+            <table class="table">
+              <thead><tr><th>Name</th><th style="width:90px;">Type</th><th style="width:100px;">Size</th><th style="width:140px;">Uploaded</th></tr></thead>
+              <tbody id="attRows">
+                ${(r.attachments || []).map(a => `
+                  <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>
+                `).join("")}
+              </tbody>
+            </table>
+          `;
+          const rows = body.querySelector("#attRows");
+          body.querySelector("#addAtt").onclick = async () => {
+            const name = body.querySelector("#attName").value.trim();
+            const type = body.querySelector("#attType").value;
+            const size = body.querySelector("#attSize").value.trim() || "—";
+            if (!name) return alert("Enter a file name");
+            try {
+              const a = await rfpAddAttachment(r.id, { name, type, size });
+              rows.insertAdjacentHTML("afterbegin",
+                `<tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`
+              );
+              toast("Attachment added");
+              body.querySelector("#attName").value = "";
+              body.querySelector("#attSize").value = "";
+            } catch (err) {
+              alert(err.message || "Failed to add attachment");
+            }
+          };
+          return;
+        }
+      }
+
+      // Tab wiring
+      tabs.addEventListener("click", (e) => {
+        const t = e.target.closest(".tab");
+        if (!t) return;
+        tabs.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+        t.classList.add("active");
+        renderTab(t.dataset.tab);
+      });
+      await renderTab("overview");
+
+      // Save stage
+      card.querySelector("#saveStage").onclick = async () => {
+        const val = card.querySelector("#stageSel").value;
+        await rfpSetStage(r.id, val);
+        toast("RFP stage updated");
+        state.view = "rfp"; render();
+      };
+
+    } catch(e){
+      main.innerHTML = `<div class="card"><div class="p" style="color:#b91c1c">${e.message}</div></div>`;
+    }
+  }
+
+  load();
+  return root;
+}
+
+function ViewPortfolioRisk() {
   const root = document.createElement("div");
   root.className = "container";
   root.appendChild(topNav());
 
   const main = document.createElement("div");
-  main.className = "card";
-  main.innerHTML = `<div class="p"><h2>Report: ${state.selectedReport?.label}</h2><div id="body"><small class="muted">Loading…</small></div></div>`;
+  main.className = "grid";
+  main.style.gridTemplateColumns = "2fr 1fr";
+  main.style.gap = "16px";
+
+  // Main content card
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="p">
+      <div id="content"><small class="muted">Loading Portfolio Risk data…</small></div>
+    </div>
+  `;
+
+  // Sidebar card
+  const sidebar = document.createElement("div");
+  sidebar.className = "card";
+  sidebar.innerHTML = `
+    <div class="p">
+      <div id="sidebar"><small class="muted">Loading…</small></div>
+    </div>
+  `;
+
+  main.appendChild(card);
+  main.appendChild(sidebar);
   root.appendChild(main);
 
-  (async()=>{
-    try{
-      // Use api.get for fetching report details
-      const data = await api.get(`/reports/${encodeURIComponent(state.selectedReport.label)}`);
-      const body = main.querySelector("#body");
-      body.innerHTML = `
-        <div class="row">
-          <div><small class="muted">Code</small><div><strong>${data.code}</strong></div></div>
-          <div style="margin-left:20px;"><small class="muted">Generated</small><div>${new Date(data.generatedAt).toLocaleString()}</div></div>
+  const content = card.querySelector("#content");
+  const sidebarContent = sidebar.querySelector("#sidebar");
+
+  // Helper function to create progress bars
+  function createBar(value, max = 5, color = "#0ea5e9") {
+    const width = Math.min(100, Math.abs(value) / max * 100);
+    const bg = value >= 0 ? color : "#ef4444";
+    return `
+      <div style="background: #374151; border: 1px solid #4b5563; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; margin-top: 2px;">
+        <div style="width: ${width}%; height: 100%; background: ${bg};"></div>
+      </div>
+    `;
+  }
+
+  (async () => {
+    try {
+      const data = await api.get("/reports/RISK-PORTFOLIO");
+      const m = data.metrics || {};
+      const sectors = data.sectorExposures || [];
+      const factors = data.factorExposures || [];
+      const contrib = data.topContributorsBps || [];
+      const scenarios = data.scenarios || [];
+
+      content.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+          <div>
+            <h2 style="margin: 0;">Portfolio Risk — ${data.portfolio?.name}</h2>
+            <small class="muted">Benchmark: ${data.portfolio?.benchmark}</small>
+          </div>
+          <small class="muted">As of: ${new Date(data.asOf).toLocaleString()}</small>
         </div>
-        <div style="height:12px;"></div>
-        <p>${data.summary}</p>
-        <ul>
-          ${data.dataPoints.map(d=>`<li>${d.key}: <strong>${d.value}</strong></li>`).join("")}
-        </ul>
+
+        <!-- KPI Cards -->
+        <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">Tracking Error</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.trackingErrorPct)}</div>
+          </div>
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">Beta</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${m.beta?.toFixed(2)}</div>
+          </div>
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">VaR 95% (1d)</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.var95_oneDayPct)}</div>
+          </div>
+          <div class="card" style="text-align: center; padding: 12px;">
+            <div class="muted" style="font-size: 12px;">Active Share</div>
+            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.activeSharePct)}</div>
+          </div>
+        </div>
+
+        <!-- Sector & Factor Tables -->
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Sector exposures</h3>
+              <table class="table">
+                <thead>
+                  <tr><th>Sector</th><th>Port</th><th>Bench</th><th>Active</th><th style="width: 60px;"></th></tr>
+                </thead>
+                <tbody>
+                  ${sectors.map(s => `
+                    <tr>
+                      <td>${s.sector}</td>
+                      <td>${fmtPct(s.portWtPct)}</td>
+                      <td>${fmtPct(s.benchWtPct)}</td>
+                      <td style="color: ${s.activePct >= 0 ? '#10b981' : '#ef4444'}">${fmtPct(s.activePct)}</td>
+                      <td>${createBar(s.activePct, 5)}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Factor exposures</h3>
+              <table class="table">
+                <thead>
+                  <tr><th>Factor</th><th>Exposure</th><th style="width: 60px;"></th></tr>
+                </thead>
+                <tbody>
+                  ${factors.map(f => `
+                    <tr>
+                      <td>${f.factor}</td>
+                      <td style="color: ${f.exposure >= 0 ? '#10b981' : '#ef4444'}">${f.exposure.toFixed(2)}</td>
+                      <td>${createBar(f.exposure, 0.5, "#8b5cf6")}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contributors & Scenarios -->
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Top contributors (bps)</h3>
+              <ul style="list-style: none; padding: 0; margin: 0;">
+                ${contrib.map(c => `
+                  <li style="margin-bottom: 6px; color: ${c.contribBps >= 0 ? '#e5e7eb' : '#ef4444'};">
+                    ${c.name} — <strong>${fmtBps(c.contribBps)}</strong>
+                  </li>
+                `).join("")}
+              </ul>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="p">
+              <h3 style="margin: 0 0 12px 0;">Scenarios</h3>
+              <table class="table">
+                <thead>
+                  <tr><th>Scenario</th><th>Shock</th><th>PnL (bps)</th></tr>
+                </thead>
+                <tbody>
+                  ${scenarios.map(s => `
+                    <tr>
+                      <td>${s.name}</td>
+                      <td><small class="muted">${s.shock}</small></td>
+                      <td style="color: ${s.pnlBps >= 0 ? '#10b981' : '#ef4444'}">${fmtBps(s.pnlBps)}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" onclick="alert('Download CSV - Mock functionality')">Download CSV</button>
+          <button class="btn" onclick="alert('Export PDF - Mock functionality')">Export PDF</button>
+        </div>
       `;
-    } catch(e){
-      main.querySelector("#body").innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
+
+      sidebarContent.innerHTML = `
+        <h3 style="margin: 0 0 12px 0;">Portfolio Info</h3>
+        <div class="kv">
+          <div><strong>AUM:</strong> ${formatAUD(data.portfolio?.aumAud || 0)}</div>
+          <div><strong>Name:</strong> ${data.portfolio?.name}</div>
+          <div><strong>Benchmark:</strong> ${data.portfolio?.benchmark}</div>
+        </div>
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #374151;">
+          <small class="muted">All figures are mock and for training purposes only.</small>
+        </div>
+      `;
+
+    } catch (e) {
+      content.innerHTML = `<div style="color: #ef4444;">Error loading Portfolio Risk data: ${e.message}</div>`;
+      sidebarContent.innerHTML = `<div style="color: #ef4444;">Error</div>`;
     }
   })();
 
@@ -1211,8 +2379,7 @@ function ViewProfile() {
                   <label class="label" for="role">Role</label>
                   <input id="role" class="input" disabled/>
                 </div>
-              </div>
-            </div>
+              </div></div>
           </div>
         </div>
       </section>
@@ -1461,634 +2628,6 @@ function ViewProfile() {
   return root;
 }
 
-function ViewClients() {
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
-
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div class="flex-between">
-        <h2>Clients</h2>
-        <div class="row">
-          <input id="q" class="input" placeholder="Filter clients…" style="width:240px;">
-          <button id="refresh" class="btn">Refresh</button>
-        </div>
-      </div>
-      <div style="height:12px;"></div>
-      <div style="overflow:auto;">
-        <table class="table" id="tbl">
-          <thead><tr>
-            <th>Name</th><th>Type</th><th>Strategies</th><th>AUM (AUD)</th><th>Fee (bps)</th><th>Last Review</th><th>Next Review</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-  root.appendChild(card);
-
-  const tbody = card.querySelector("tbody");
-  const q = card.querySelector("#q");
-
-  async function load() {
-    // Use api.get to fetch clients
-    const list = await api.get("/clients");
-    state._clientsList = list;
-    draw(list);
-  }
-  function draw(list) {
-    tbody.innerHTML = "";
-    list.forEach(c => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><a class="link" href="#" data-client="${c.name}">${c.name}</a></td>
-        <td>${c.type}</td>
-        <td>${(c.strategies||[]).join(", ")}</td>
-        <td>${formatAUD(c.aumAud)}</td>
-        <td>${c.feeBps}</td>
-        <td>${c.lastReview}</td>
-        <td>${c.nextReview}</td>
-      `;
-      tr.querySelector("a").onclick = (e) => { e.preventDefault(); setState({ view: "client", selectedClient: c.name }); };
-      tbody.appendChild(tr);
-    });
-  }
-
-  q.oninput = () => {
-    const term = q.value.trim().toLowerCase();
-    const list = (state._clientsList || []).filter(c =>
-      [c.name, c.type, (c.strategies||[]).join(" ")].some(s => s.toLowerCase().includes(term))
-    );
-    draw(list);
-  };
-
-  card.querySelector("#refresh").onclick = load;
-  load().catch(e => alert(e.message));
-  return root;
-}
-
-function ViewClientDetail() {
-  const name = state.selectedClient;
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
-
-  const wrap = document.createElement("div");
-  wrap.className = "grid";
-  wrap.style.gridTemplateColumns = "1fr";
-  root.appendChild(wrap);
-
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div class="flex-between">
-        <h2>Client: ${name}</h2>
-        <button id="back" class="btn">← All Clients</button>
-      </div>
-      <div style="height:10px;"></div>
-      <div class="tabs">
-        <div class="tab active" data-tab="overview">Overview</div>
-        <div class="tab" data-tab="holdings">Holdings</div>
-        <div class="tab" data-tab="documents">Documents</div>
-        <div class="tab" data-tab="notes">Notes</div>
-      </div>
-      <div class="section" id="content"><small class="muted">Loading…</small></div>
-    </div>
-  `;
-  wrap.appendChild(card);
-
-  card.querySelector("#back").onclick = () => setState({ view: "clients" });
-
-  let data = null;
-  let tab = "overview";
-  const content = card.querySelector("#content");
-
-  (async()=>{
-    try {
-      // Use api.get to fetch client details
-      data = await api.get(`/clients/${encodeURIComponent(name)}`);
-      drawOverview();
-    } catch(e) {
-      content.innerHTML = `<span style="color:#b91c1c">${e.message}</span>`;
-    }
-  })();
-
-  function setTab(next) {
-    tab = next;
-    for (const t of card.querySelectorAll(".tab")) t.classList.toggle("active", t.dataset.tab === tab);
-    if (tab === "overview") drawOverview();
-    if (tab === "holdings") drawHoldings();
-    if (tab === "documents") drawDocuments();
-    if (tab === "notes") drawNotes();
-  }
-  card.querySelectorAll(".tab").forEach(t => t.onclick = () => setTab(t.dataset.tab));
-
-  function drawOverview() {
-    content.innerHTML = `
-      <div class="grid" style="grid-template-columns: repeat(4,minmax(0,1fr));">
-        ${kpiHtml("AUM (AUD)", formatAUD(data.aumAud))}
-        ${kpiHtml("Fee (bps)", data.feeBps)}
-        ${kpiHtml("Benchmark", data.benchmark)}
-        ${kpiHtml("SLA", data.sla)}
-      </div>
-      <div style="height:14px;"></div>
-      <div class="grid" style="grid-template-columns: 1fr 1fr; align-items:start;">
-        <div class="card"><div class="p">
-          <h3>Contacts</h3>
-          <ul>${data.contacts.map(c=>`<li><strong>${c.name}</strong> — ${c.role}<br><small class="muted">${c.email} · ${c.phone}</small></li>`).join("")}</ul>
-        </div></div>
-        <div class="card"><div class="p">
-          <h3>Key Dates</h3>
-          <ul>
-            <li>Last Review: <strong>${data.lastReview}</strong></li>
-            <li>Next Review: <strong>${data.nextReview}</strong></li>
-            <li>Upcoming meeting: <strong>${(data.meetings[0] && new Date(data.meetings[0].when).toLocaleString()) || "—"}</strong></li>
-          </ul>
-        </div></div>
-      </div>
-      <div style="height:14px;"></div>
-      <div class="card"><div class="p">
-        <h3>Performance (relative, mock)</h3>
-        ${sparkline(data.perfSpark)}
-        <small class="muted">12-point series; illustrative only.</small>
-      </div></div>
-    `;
-  }
-
-  function drawHoldings() {
-    content.innerHTML = `
-      <div class="grid" style="grid-template-columns: 1fr 1fr; gap:16px;">
-        <div>
-          <h3>Top 10 Positions</h3>
-          <table class="table"><thead><tr><th>Name</th><th>Weight %</th></tr></thead>
-            <tbody>${data.holdingsTop10.map(h=>`<tr><td>${h.name}</td><td>${h.weight.toFixed(1)}</td></tr>`).join("")}</tbody>
-          </table>
-        </div>
-        <div>
-          <h3>Sector Weights</h3>
-          <table class="table"><thead><tr><th>Sector</th><th>Weight %</th></tr></thead>
-            <tbody>${data.sectorWeights.map(s=>`<tr><td>${s.sector}</td><td>${s.weight.toFixed(1)}</td></tr>`).join("")}</tbody>
-          </table>
-        </div>
-      </div>
-    `;
-  }
-
-  function drawDocuments() {
-    content.innerHTML = `
-      <div class="row">
-        <input id="docName" class="input" placeholder="Document name (e.g., Q3-Perf-Deck.pdf)" style="max-width:360px;">
-        <select id="docType" class="input" style="max-width:120px;"><option>PDF</option><option>XLSX</option><option>CSV</option><option>ZIP</option></select>
-        <button id="addDoc" class="btn">Add</button>
-      </div>
-      <div style="height:10px;"></div>
-      <table class="table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Size</th><th>Uploaded</th></tr></thead>
-        <tbody id="docsBody">${data.docs.map(rowDoc).join("")}</tbody>
-      </table>
-    `;
-    content.querySelector("#addDoc").onclick = async () => {
-      const name = content.querySelector("#docName").value.trim();
-      const type = content.querySelector("#docType").value;
-      if (!name) return alert("Enter a document name");
-      try {
-        // Use api.post for adding document
-        const d = await api.post(`/clients/${encodeURIComponent(state.selectedClient)}/docs`, { name, type, size: "—" });
-        data.docs.unshift(d);
-        content.querySelector("#docsBody").insertAdjacentHTML("afterbegin", rowDoc(d));
-        content.querySelector("#docName").value = "";
-      } catch(e) { alert(e.message); }
-    };
-  }
-
-  function drawNotes() {
-    content.innerHTML = `
-      <div class="row">
-        <input id="note" class="input" placeholder="Add a note… (saved to audit trail)" />
-        <button id="addNote" class="btn">Add note</button>
-      </div>
-      <div style="height:10px;"></div>
-      <div id="notesList">
-        ${data.notes.map(noteHtml).join("")}
-      </div>
-    `;
-    content.querySelector("#addNote").onclick = async () => {
-      const text = content.querySelector("#note").value.trim();
-      if (!text) return;
-      try {
-        // Use api.post for adding a note
-        const n = await api.post(`/clients/${encodeURIComponent(state.selectedClient)}/notes`, { text });
-        data.notes.unshift(n);
-        content.querySelector("#notesList").insertAdjacentHTML("afterbegin", noteHtml(n));
-        content.querySelector("#note").value = "";
-      } catch(e) { alert(e.message); }
-    };
-  }
-
-  // helpers
-  function kpiHtml(label, val) {
-    return `<div class="card"><div class="p"><strong>${val}</strong><small class="muted">${label}</small></div></div>`;
-  }
-  function rowDoc(d) {
-    return `<tr><td>${d.id}</td><td>${d.name}</td><td>${d.type}</td><td>${d.size}</td><td>${new Date(d.uploadedAt).toLocaleString()}</td></tr>`;
-  }
-  function noteHtml(n) {
-    return `<div style="border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; margin-bottom:8px;">
-      <div><strong>${new Date(n.ts).toLocaleString()}</strong> — <span class="muted">${n.user}</span></div>
-      <div>${escapeHtml(n.text)}</div>
-    </div>`;
-  }
-  function sparkline(arr) {
-    // inline SVG sparkline
-    const w = 160, h = 40, pad = 4;
-    const min = Math.min(...arr), max = Math.max(...arr);
-    const nx = (i) => pad + (i * (w - 2*pad)) / (arr.length - 1 || 1);
-    const ny = (v) => h - pad - ((v - min) * (h - 2*pad)) / ((max - min) || 1);
-    const d = arr.map((v, i) => `${i===0?"M":"L"} ${nx(i).toFixed(1)} ${ny(v).toFixed(1)}`).join(" ");
-    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="sparkline"><path d="${d}" fill="none" stroke="#111827" stroke-width="1.5"/></svg>`;
-  }
-  function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-// === Mandates API ===
-async function mandatesList(){ return await api.get("/mandates"); }
-async function mandateGet(id){ return await api.get(`/mandates/${encodeURIComponent(id)}`); }
-async function mandateCreate(payload){
-  return await api.post("/mandates", payload);
-}
-async function mandateUpdate(id, payload){
-  return await api.put(`/mandates/${encodeURIComponent(id)}`, payload);
-}
-async function mandateDelete(id){
-  return await api.del(`/mandates/${encodeURIComponent(id)}`);
-}
-async function mandateBreaches(id){
-  return await api.get(`/mandates/${encodeURIComponent(id)}/breaches`);
-}
-async function mandatePatchBreach(id, breachId, payload){
-  return await api.patch(`/mandates/${encodeURIComponent(id)}/breaches/${encodeURIComponent(breachId)}`, payload);
-}
-
-// === Mandate Breaches helpers ===
-async function fetchMandateDetail(id){
-  return await mandateGet(id);
-}
-
-function buildBreachesPanel(mandate){
-  const breaches = mandate.breaches || [];
-  const el = document.createElement("div");
-  el.innerHTML = breaches.length ? `
-    <table class="table">
-      <thead>
-        <tr>
-          <th style="width:140px;">Breach ID</th>
-          <th>Type</th>
-          <th style="width:110px;">Severity</th>
-          <th style="width:100px;">Status</th>
-          <th style="width:120px;">Opened</th>
-          <th style="width:120px;">Resolved</th>
-          <th>Note</th>
-          <th style="width:150px;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${breaches.map(b => `
-          <tr>
-            <td>${b.id}</td>
-            <td>${b.type}</td>
-            <td><span class="badge ${String(b.severity||'').toLowerCase()}">${b.severity || '-'}</span></td>
-            <td><span class="pill ${String(b.status||'').toLowerCase()}">${b.status || '-'}</span></td>
-            <td>${b.opened ? new Date(b.opened).toLocaleDateString() : '-'}</td>
-            <td>${b.resolved ? new Date(b.resolved).toLocaleDateString() : '-'}</td>
-            <td>${b.note || ''}</td>
-            <td>
-              ${b.status === "Open" ? `<button class="btn-small" data-ack="${b.id}">Acknowledge</button>` : ""}
-              ${b.status === "Acknowledged" ? `<button class="btn-small" data-resolve="${b.id}">Resolve</button>` : ""}
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  ` : `<div class="muted">✅ No breaches for this mandate.</div>`;
-  return el;
-}
-
-function buildMandateOverview(mandateData) {
-  const el = document.createElement("div");
-  el.innerHTML = `
-    <div class="kv">
-      <dl>
-        <dt>Client</dt><dd>${mandateData.client || "-"}</dd>
-        <dt>Strategy</dt><dd>${mandateData.strategy || "-"}</dd>
-        <dt>AUM (AUD)</dt><dd>${mandateData.aumAud != null ? formatAUD(mandateData.aumAud) : "-"}</dd>
-        <dt>Status</dt><dd>${statusPill(mandateData.status || "Active")}</dd>
-        <dt>Last Update</dt><dd>${mandateData.lastUpdate || "-"}</dd>
-      </dl>
-    </div>
-  `;
-  return el;
-}
-
-  return root;
-}
-
-// --- Mandate Pipeline (compact) ---
-function buildPipelineBox(pipeline = []) {
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div class="section-title">Mandate Pipeline</div>
-      <div class="pipeline-box"></div>
-    </div>
-  `;
-  const box = card.querySelector(".pipeline-box");
-  if (!pipeline.length){
-    box.innerHTML = `<div class="subtle">No pipeline items.</div>`;
-    return card;
-  }
-  pipeline.forEach((step, i) => {
-    const { stage, due, owner, note } = step;
-    const el = document.createElement("div");
-    el.className = "pipeline-step" + (i === 0 ? " active" : "");
-    el.innerHTML = `
-      <div class="pipeline-dot" aria-hidden="true"></div>
-      <div>
-        <div><b>${stage || "Stage"}</b></div>
-        <div class="pipeline-meta">
-          ${due ? `<span class="badge">${new Date(due).toLocaleDateString()}</span>` : ""}
-          ${owner ? `<span class="badge">${owner}</span>` : ""}
-        </div>
-        ${note ? `<div class="pipeline-note">${note}</div>` : ""}
-      </div>
-      <div><button class="btn-ghost" data-stage="${stage || ""}">Open</button></div>
-    `;
-    box.appendChild(el);
-  });
-  box.addEventListener("click", (e) => {
-    const st = e.target?.dataset?.stage;
-    if (!st) return;
-    // Simple routing: RFP -> Clients; Packs/Reports -> Reports page, etc.
-    if (/RFP/i.test(st)) { state.view = "clients"; render(); }
-    else { state.view = "report"; state.reportCode = "PERF-ACB"; render(); }
-  });
-  return card;
-}
-
-async function buildPerformanceCard({ limit = 3 } = {}){
-  try {
-    const data = await api.get("/clients");
-    const rows = (data || [])
-      .map(c => ({
-        name: c.name,
-        perf: c.perfSpark || [1, 2, 1.5, 3, 2.5, 4, 3.5, 5, 4.5, 6, 5.5, 7],
-        ytd: c.returns?.ytdPct ?? Math.random() * 10 - 5
-      }))
-      .slice(0, limit);
-
-    const card = document.createElement("div");
-    card.className = "card perf-compact";
-    card.innerHTML = `
-      <div class="p">
-        <div class="flex-between">
-          <div class="section-title">Performance Snapshot</div>
-          <div class="perf-actions">
-            <button class="btn-ghost" id="perf-all">View all</button>
-          </div>
-        </div>
-        <table class="table">
-          <thead><tr><th>Client</th><th style="width:170px;">Last 12m</th><th style="width:90px;">YTD</th><th style="width:90px;"></th></tr></thead>
-          <tbody>
-            ${rows.map(r => `
-              <tr>
-                <td>${r.name}</td>
-                <td class="spark-cell">${sparkline(r.perf)}</td>
-                <td>${r.ytd != null ? fmtPct(r.ytd) : "-"}</td>
-                <td><button class="btn-ghost" data-name="${r.name}">Open</button></td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="subtle sep"></div>
-        <small class="subtle">Compact view shows top ${limit}. Use "View all" for the full list.</small>
-      </div>
-    `;
-
-    const tb = card.querySelector("tbody");
-    if (tb) {
-      tb.addEventListener("click", (e) => {
-        const name = e.target?.dataset?.name;
-        if (!name) return;
-        state.view = "report";
-        state.reportCode = "PERF-ACB";
-        render().catch(console.error);
-      });
-    }
-
-    const perfAllBtn = card.querySelector("#perf-all");
-    if (perfAllBtn) {
-      perfAllBtn.onclick = () => {
-        state.view = "clients";
-        render().catch(console.error);
-      };
-    }
-    return card;
-  } catch (e) {
-    console.error("Performance card error:", e);
-    // Return fallback mock data card
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="p">
-        <div class="section-title">Performance Snapshot</div>
-        <table class="table">
-          <thead><tr><th>Client</th><th style="width:170px;">Last 12m</th><th style="width:90px;">YTD</th></tr></thead>
-          <tbody>
-            <tr><td>SunSuper</td><td>Mock Data</td><td>+2.4%</td></tr>
-            <tr><td>QBE Insurance</td><td>Mock Data</td><td>+1.8%</td></tr>
-            <tr><td>Pacific Rail</td><td>Mock Data</td><td>+3.1%</td></tr>
-          </tbody>
-        </table>
-        <div class="subtle">Training mode - API unavailable</div>
-      </div>
-    `;
-    return card;
-  }
-}
-
-function buildRiskOverviewCompact(risk){
-  const card = document.createElement("div");
-  card.className = "card";
-  const te = Number(risk?.trackingErrorBps ?? 0);
-  const tePct = Math.min(1, Math.abs(te) / 400);
-  const var1 = Number(risk?.var95_oneDayPct ?? 0);
-  const var10 = Number(risk?.var95_tenDayPct ?? 0);
-  const beta = Number(risk?.beta ?? 1);
-  const ir = Number(risk?.infoRatio ?? 0);
-  const act = Number(risk?.activeSharePct ?? 0);
-
-  card.innerHTML = `
-    <div class="p">
-      <div class="section-title">Risk Overview</div>
-      <div class="risk-compact">
-        <div class="risk-stat">
-          <div class="risk-label">Tracking Error</div>
-          <div class="risk-value">${fmtBps(te)}</div>
-          <div class="risk-mini">Budget: 0–250 bps</div>
-          <div class="risk-bar" style="margin-top:8px;"><span style="right:${(100 - tePct*100).toFixed(1)}%"></span></div>
-        </div>
-        <div class="risk-stat">
-          <div class="risk-label">VaR (95%)</div>
-          <div class="risk-value">${var1.toFixed(1)}% (1-day)</div>
-          <div class="risk-mini">${var10.toFixed(1)}% (10-day)</div>
-        </div>
-        <div class="risk-stat">
-          <div class="risk-label">Beta</div>
-          <div class="risk-value">${beta.toFixed(2)}</div>
-          <div class="risk-mini">Info Ratio ${ir.toFixed(2)}</div>
-        </div>
-        <div class="risk-stat">
-          <div class="risk-label">Active Share</div>
-          <div class="risk-value">${act.toFixed(0)}%</div>
-          <div class="risk-mini">vs benchmark</div>
-        </div>
-      </div>
-
-      <details class="risk-collapsible">
-        <summary class="subtle">Factor Exposures (compact)</summary>
-        <div style="margin-top:8px;">
-          <table class="table">
-            <thead><tr><th>Factor</th><th style="width:80px;">Exposure</th></tr></thead>
-            <tbody>
-              ${(risk?.factors || []).slice(0,8).map(f => `
-                <tr>
-                  <td>${f.factor}</td>
-                  <td style="color:${f.exposure >= 0 ? '#065f46' : '#ef4444'}">${f.exposure.toFixed(2)}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-        </div>
-      </details>
-    </div>
-  `;
-  return card;
-}
-
-// New Mandates Views
-function ViewMandates() {
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
-
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div class="flex-between">
-        <h2>Mandates</h2>
-        <div class="row">
-          <input id="q" class="input" placeholder="Filter mandates…" style="width:240px;">
-          <button id="refresh" class="btn">Refresh</button>
-          <button id="newMandateBtn" class="btn primary">New Mandate</button>
-        </div>
-      </div>
-      <div style="height:12px;"></div>
-      <div style="overflow:auto;">
-        <table class="table" id="tbl">
-          <thead><tr>
-            <th>ID</th><th>Client</th><th>Strategy</th><th>AUM (AUD)</th><th>Status</th><th>Last Update</th><th>Actions</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  `;
-  root.appendChild(card);
-
-  const tbody = card.querySelector("tbody");
-  const q = card.querySelector("#q");
-
-  function renderMandatesTable(rows){
-    return rows.map(r => {
-      const id = r.id || "-";
-      const client = r.client || "-";
-      const strategy = r.strategy || "-";
-      const aum = r.aumAud != null ? formatAUD(r.aumAud) : "—";
-      const status = r.status || "—";
-      const updated = r.lastUpdate ? new Date(r.lastUpdate).toLocaleDateString() : "—";
-      return `
-        <tr>
-          <td><strong>${id}</strong></td>
-          <td><a class="link" href="#" data-client="${client}">${client}</a></td>
-          <td>${strategy}</td>
-          <td>${aum}</td>
-          <td><span class="pill">${status}</span></td>
-          <td>${updated}</td>
-          <td style="text-align:right;">
-            <button class="btn btn-small" data-open="${id}">Open</button>
-          </td>
-        </tr>
-      `;
-    }).join("") || `<tr><td colspan="7" class="muted">No mandates.</td></tr>`;
-  }
-
-  async function load() {
-    const list = await mandatesList();
-    state._mandatesList = list;
-    draw(list);
-  }
-
-  function draw(list) {
-    tbody.innerHTML = renderMandatesTable(list);
-  }
-
-  q.oninput = () => {
-    const term = q.value.trim().toLowerCase();
-    const list = (state._mandatesList || []).filter(m =>
-      [m.id.toString(), m.client, m.strategy].some(s => s.toLowerCase().includes(term))
-    );
-    draw(list);
-  };
-
-  // Event delegation for table clicks
-  tbody.addEventListener("click", (e) => {
-    const mandateId = e.target?.dataset?.open;
-    const client = e.target?.dataset?.client;
-
-    if (mandateId) {
-      setState({ view: "mandate", selectedMandate: mandateId });
-      return;
-    }
-
-    if (client) {
-      e.preventDefault();
-      setState({ view: "client", selectedClient: client });
-      return;
-    }
-  });
-
-  card.querySelector("#refresh").onclick = load;
-  card.querySelector("#newMandateBtn").onclick = async () => {
-    const id = prompt("Mandate ID (e.g., M-AUS-EQ-SS-002):");
-    const client = id ? prompt("Client:") : null;
-    const strategy = client ? prompt("Strategy:") : null;
-    if (!id || !client || !strategy) return;
-    try {
-      await mandateCreate({ id, client, strategy, status: "Active", aumAud: 0 });
-      await load();
-      alert("Mandate created");
-    } catch (e) {
-      alert(e.message || "Failed to create mandate");
-    }
-  };
-
-  load().catch(e => alert(e.message));
-  return root;
-}
-
 function ViewMandateDetail() {
   const mandate = state.selectedMandate;
   const root = document.createElement("div");
@@ -2096,9 +2635,14 @@ function ViewMandateDetail() {
   root.appendChild(topNav());
 
   const wrap = document.createElement("div");
-  wrap.className = "grid";
-  wrap.style.gridTemplateColumns = "1fr";
+  wrap.className = "layout";
   root.appendChild(wrap);
+
+  wrap.appendChild(sidebar());
+
+  const main = document.createElement("div");
+  main.className = "main";
+  wrap.appendChild(main);
 
   const card = document.createElement("div");
   card.className = "card";
@@ -2124,7 +2668,7 @@ function ViewMandateDetail() {
         </div>
     </div>
   `;
-  wrap.appendChild(card);
+  main.appendChild(card);
 
   card.querySelector("#back").onclick = () => setState({ view: "mandates" });
 
@@ -2139,7 +2683,6 @@ function ViewMandateDetail() {
 
     if (tabName === "breaches") {
       try {
-        // Use api.get to fetch breaches
         const { breaches } = await api.get(`/mandates/${mandate.id}/breaches`);
         content.innerHTML = "";
         content.appendChild(buildBreachesPanel({ breaches }));
@@ -2150,7 +2693,6 @@ function ViewMandateDetail() {
           if (!breachId) return;
           try {
             const status = e.target.dataset.ack ? "Acknowledged" : "Resolved";
-            // Use api.patch for the PATCH request
             await api.patch(`/mandates/${mandate.id}/breaches/${breachId}`, { status });
             alert(`Breach ${status}`);
             // Refresh the breaches view
@@ -2183,6 +2725,17 @@ function ViewMandateDetail() {
     }
   }
 
+  // Tab click handler
+  if (!mandate?.editMode) {
+    card.addEventListener("click", (e) => {
+      const t = e.target.closest(".tab");
+      if (!t) return;
+      card.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      renderTab(t.dataset.tab);
+    });
+  }
+
   function updateForm() {
     content.innerHTML = `
       <div class="kv">
@@ -2210,17 +2763,6 @@ function ViewMandateDetail() {
         el.oninput = () => { formData[el.id] = el.value; };
       });
     }
-  }
-
-  // Tab click handler
-  if (!mandate?.editMode) {
-    card.addEventListener("click", (e) => {
-      const t = e.target.closest(".tab");
-      if (!t) return;
-      card.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-      t.classList.add("active");
-      renderTab(t.dataset.tab);
-    });
   }
 
   if (!mandate) {
@@ -2271,35 +2813,23 @@ function ViewMandateDetail() {
   return root;
 }
 
-
-function openApprovalById(id) {
-  setState({ view: "dashboard", drawerOpen: false, drawerItem: null, highlightApprovalId: id });
-  loadDashboard(id, false, false);
-}
-
-function openApprovalsPending() {
-  setState({ view: "dashboard", drawerOpen: false, drawerItem: null });
-  loadDashboard(undefined, true, true);
-}
-
-// Global function for mandate links
-window.viewMandate = (id) => setState({ view: "mandate", selectedMandate: id });
-
-async function ViewAdmin(){
+function ViewAdmin(){
   // Role gate
-  const me = await fetchMe();
-  if (!me || me.role !== "Admin") {
-    const root = document.createElement("div");
-    root.className = "container";
-    root.appendChild(topNav());
-    const wrap = document.createElement("div"); wrap.className = "layout"; root.appendChild(wrap);
-    wrap.appendChild(sidebar());
-    const main = document.createElement("div"); main.className = "main"; wrap.appendChild(main);
-    const card = document.createElement("div"); card.className = "card";
-    card.innerHTML = `<div class="p"><h2>Forbidden</h2><div class="muted">You don't have permission to access Admin.</div></div>`;
-    main.appendChild(card);
-    return root;
-  }
+  const me = fetchMe().then(me => {
+    if (!me || me.role !== "Admin") {
+      const root = document.createElement("div");
+      root.className = "container";
+      root.appendChild(topNav());
+      const wrap = document.createElement("div"); wrap.className = "layout"; root.appendChild(wrap);
+      wrap.appendChild(sidebar());
+      const main = document.createElement("div"); main.className = "main"; wrap.appendChild(main);
+      const card = document.createElement("div"); card.className = "card";
+      card.innerHTML = `<div class="p"><h2>Forbidden</h2><div class="muted">You don't have permission to access Admin.</div></div>`;
+      main.appendChild(card);
+      return root;
+    }
+  });
+
   const root = document.createElement("div");
   root.className = "container";
   root.appendChild(topNav());
@@ -2484,501 +3014,30 @@ async function ViewAdmin(){
   return root;
 }
 
-function ViewRfps(){
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
+// Main render function
+async function render() {
+  const app = document.getElementById("app");
+  if (!app) return;
 
-  const wrap = document.createElement("div");
-  wrap.className = "layout";
-  root.appendChild(wrap);
-
-  wrap.appendChild(sidebar());
-
-  // Main
-  const main = document.createElement("div");
-  main.className = "main";
-  wrap.appendChild(main);
-
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div class="flex-between">
-        <h2>RFPs</h2>
-        <div class="inline">
-          <input id="q" placeholder="Search id/title…" style="width: 220px;">
-          <select id="stage">
-            <option value="">All stages</option>
-            ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option>${s}</option>`).join("")}
-          </select>
-          <button class="btn" id="new">New RFP</button>
-        </div>
-      </div>
-      <div style="height:10px;"></div>
-      <table class="table">
-        <thead>
-          <tr><th style="width:160px;">ID</th><th>Title</th><th style="width:160px;">Client</th><th style="width:150px;">Stage</th><th style="width:120px;">Due</th><th style="width:120px;"></th></tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  `;
-  main.appendChild(card);
-
-  const rows = card.querySelector("#rows");
-  const q = card.querySelector("#q");
-  const stage = card.querySelector("#stage");
-
-  async function refresh(){
-    rows.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
-    try {
-      // Use api.get to fetch RFPs
-      const { rfps=[] } = await rfpList({ q: q.value, stage: stage.value });
-      rows.innerHTML = rfps.map(r => `
-        <tr>
-          <td>${r.id}</td>
-          <td>${r.title}</td>
-          <td>${r.client}</td>
-          <td><span class="pill">${r.stage}</span></td>
-          <td>${r.due || "-"}</td>
-          <td><button class="btn-ghost" data-id="${r.id}">Open</button></td>
-        </tr>
-      `).join("") || `<tr><td colspan="6" class="muted">No RFPs</td></tr>`;
-    } catch(e){
-      rows.innerHTML = `<tr><td colspan="6" style="color:#b91c1c">${e.message}</td></tr>`;
-    }
+  let view;
+  switch (state.view) {
+    case "auth": view = ViewAuth(); break;
+    case "mfa": view = ViewMfa(); break;
+    case "dashboard": view = DashboardMain(); break;
+    case "profile": view = ViewProfile(); break;
+    case "clients": view = ViewClients(); break;
+    case "client": view = ViewClientDetail(); break;
+    case "mandates": view = ViewMandates(); break;
+    case "mandate": view = ViewMandateDetail(); break;
+    case "rfps": view = ViewRfps(); break;
+    case "rfp": view = ViewRfpDetail(); break;
+    case "portfolio-risk": view = ViewPortfolioRisk(); break;
+    case "admin": view = ViewAdmin(); break;
+    default: view = DashboardMain(); break; // Default to dashboard if view is unknown
   }
 
-  q.oninput = () => refresh();
-  stage.onchange = () => refresh();
-  refresh();
-
-  // New RFP (tiny inline dialog)
-  card.querySelector("#new").onclick = async () => {
-    const id = prompt("RFP ID (e.g., RFP-SS-24Q3):");
-    const client = id ? prompt("Client (e.g., SunSuper):") : null;
-    const title = client ? prompt("Title:") : null;
-    if (!id || !client || !title) return;
-    try {
-      // Use api.post to create RFP
-      await rfpCreate({ id, client, title }); await refresh();
-    }
-    catch(e){ alert(e.message || "Failed to create RFP"); }
-  };
-
-  // Open detail
-  rows.addEventListener("click", async (e) => {
-    const id = e.target?.dataset?.id;
-    if (!id) return;
-    state.view = "rfp";
-    state.rfpId = id;
-    render();
-  });
-
-  return root;
-}
-
-function ViewRfpDetail(){
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
-
-  const wrap = document.createElement("div");
-  wrap.className = "layout";
-  root.appendChild(wrap);
-
-  wrap.appendChild(sidebar());
-
-  const main = document.createElement("div");
-  main.className = "main";
-  wrap.appendChild(main);
-
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div class="flex-between">
-        <h2>RFP: <span id="rid"></span></h2>
-        <button class="btn" id="back">← All RFPs</button>
-      </div>
-      <div class="sep" style="margin:10px 0;"></div>
-      <div id="meta" class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px;"></div>
-
-      <div class="tabs" id="tabs" style="margin-top:10px;">
-        <div class="tab active" data-tab="overview">Overview</div>
-        <div class="tab" data-tab="notes">Notes</div>
-        <div class="tab" data-tab="checklist">Checklist</div>
-        <div class="tab" data-tab="attachments">Attachments</div>
-      </div>
-      <div id="body" style="margin-top:10px;"></div>
-    </div>
-  `;
-  main.appendChild(card);
-
-  const rid = card.querySelector("#rid");
-  const meta = card.querySelector("#meta");
-  const body = card.querySelector("#body");
-  const tabs = card.querySelector("#tabs");
-
-  card.querySelector("#back").onclick = () => { state.view = "rfps"; render(); };
-
-  async function load(){
-    try {
-      // Use api.get to fetch RFP details
-      const r = await rfpGet(state.rfpId);
-      rid.textContent = r.id;
-      meta.innerHTML = `
-        <div class="card"><div class="p"><b>Title</b><div>${r.title}</div></div></div>
-        <div class="card"><div class="p"><b>Client</b><div>${r.client}</div></div></div>
-        <div class="card"><div class="p"><b>Owner</b><div>${r.owner}</div></div></div>
-        <div class="card"><div class="p"><b>Stage</b>
-          <div class="inline">
-            <select id="stageSel">
-              ${["Draft","Internal Review","Client Review","Submitted","Won","Lost"].map(s=>`<option ${s===r.stage?"selected":""}>${s}</option>`).join("")}
-            </select>
-            <button class="btn" id="saveStage">Save</button>
-          </div>
-        </div></div>
-        <div class="card"><div class="p"><b>Due</b><div>${r.due || "-"}</div></div></div>
-        <div class="card"><div class="p"><b>Updated</b><div>${new Date(r.lastUpdated).toLocaleString()}</div></div></div>
-      `;
-
-      async function renderTab(name){
-        if (name === "overview") {
-          body.innerHTML = `
-            <div class="muted">Use the controls above to manage stage. Other sections are in the tabs.</div>
-          `;
-          return;
-        }
-        if (name === "notes"){
-          body.innerHTML = `
-            <div class="inline">
-              <input id="noteText" placeholder="Add a note..." style="width: 60%;">
-              <button class="btn" id="addNote">Add</button>
-            </div>
-            <div style="height:8px;"></div>
-            <div id="notesList"></div>
-          `;
-          const list = body.querySelector("#notesList");
-          list.innerHTML = (r.notes || []).map(n => `
-            <div class="card"><div class="p">
-              <div class="muted">${new Date(n.ts).toLocaleString()} — ${n.user}</div>
-              <div>${n.text}</div>
-            </div></div>
-          `).join("") || `<div class="muted">No notes.</div>`;
-          body.querySelector("#addNote").onclick = async () => {
-            const t = body.querySelector("#noteText").value.trim();
-            if (!t) return;
-            // Use api.post to add a note
-            const note = await rfpAddNote(r.id, t);
-            const list = body.querySelector("#notesList");
-            list.insertAdjacentHTML("afterbegin",
-              `<div class="card"><div class="p">
-                <div class="muted">${new Date(note.ts).toLocaleString()} — ${note.user}</div>
-                <div>${note.text}</div>
-              </div></div>`
-            );
-            body.querySelector("#noteText").value = "";
-            toast("Note added");
-          };
-          return;
-        }
-        if (name === "checklist"){
-          body.innerHTML = `
-            <table class="table">
-              <thead><tr><th>Item</th><th style="width:120px;">Done</th></tr></thead>
-              <tbody>${(r.checklist || []).map(c => `
-                <tr>
-                  <td>${c.key}</td>
-                  <td>
-                    <label class="switch">
-                      <input type="checkbox" data-key="${c.key}" ${c.done ? "checked" : ""}/>
-                      <span class="slider"></span>
-                    </label>
-                  </td>
-                </tr>`).join("")}
-              </tbody>
-            </table>
-          `;
-          body.querySelector("tbody").addEventListener("change", async (e) => {
-            const key = e.target?.dataset?.key;
-            if (!key) return;
-            const done = !!e.target.checked;
-            try {
-              // Use api.put for the PUT request
-              await rfpToggleChecklist(r.id, key, done);
-              toast("Checklist updated");
-            } catch (err) {
-              alert(err.message || "Failed to update");
-              e.target.checked = !done; // revert UI on error
-            }
-          });
-          return;
-        }
-        if (name === "attachments"){
-          body.innerHTML = `
-            <div class="inline">
-              <input id="attName" placeholder="File name (e.g., Perf-Appendix.pdf)" style="width: 280px;">
-              <select id="attType">
-                <option>PDF</option><option>DOCX</option><option>XLSX</option><option>PPTX</option>
-              </select>
-              <input id="attSize" placeholder="Size (e.g., 1.2 MB)" style="width: 120px;">
-              <button class="btn" id="addAtt">Add</button>
-            </div>
-            <div style="height:10px;"></div>
-            <table class="table">
-              <thead><tr><th>Name</th><th style="width:90px;">Type</th><th style="width:100px;">Size</th><th style="width:140px;">Uploaded</th></tr></thead>
-              <tbody id="attRows">
-                ${(r.attachments || []).map(a => `
-                  <tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>
-                `).join("")}
-              </tbody>
-            </table>
-          `;
-          const rows = body.querySelector("#attRows");
-          body.querySelector("#addAtt").onclick = async () => {
-            const name = body.querySelector("#attName").value.trim();
-            const type = body.querySelector("#attType").value;
-            const size = body.querySelector("#attSize").value.trim() || "—";
-            if (!name) return alert("Enter a file name");
-            try {
-              // Use api.post for adding attachment
-              const a = await rfpAddAttachment(r.id, { name, type, size });
-              rows.insertAdjacentHTML("afterbegin",
-                `<tr><td>${a.name}</td><td>${a.type}</td><td>${a.size}</td><td>${new Date(a.uploadedAt).toLocaleString()}</td></tr>`
-              );
-              toast("Attachment added");
-              body.querySelector("#attName").value = "";
-              body.querySelector("#attSize").value = "";
-            } catch (err) {
-              alert(err.message || "Failed to add attachment");
-            }
-          };
-          return;
-        }
-      }
-
-      // Tab wiring
-      tabs.addEventListener("click", (e) => {
-        const t = e.target.closest(".tab");
-        if (!t) return;
-        tabs.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-        t.classList.add("active");
-        renderTab(t.dataset.tab);
-      });
-      await renderTab("overview");
-
-      // Save stage
-      card.querySelector("#saveStage").onclick = async () => {
-        const val = card.querySelector("#stageSel").value;
-        // Use api.put for the PUT request
-        await rfpSetStage(r.id, val);
-        toast("RFP stage updated");
-        state.view = "rfp"; render();
-      };
-
-    } catch(e){
-      main.innerHTML = `<div class="card"><div class="p" style="color:#b91c1c">${e.message}</div></div>`;
-    }
-  }
-
-  load();
-  return root;
-}
-
-function ViewPortfolioRisk() {
-  const root = document.createElement("div");
-  root.className = "container";
-  root.appendChild(topNav());
-
-  const main = document.createElement("div");
-  main.className = "grid";
-  main.style.gridTemplateColumns = "2fr 1fr";
-  main.style.gap = "16px";
-
-  // Main content card
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <div class="p">
-      <div id="content"><small class="muted">Loading Portfolio Risk data…</small></div>
-    </div>
-  `;
-
-  // Sidebar card
-  const sidebar = document.createElement("div");
-  sidebar.className = "card";
-  sidebar.innerHTML = `
-    <div class="p">
-      <div id="sidebar"><small class="muted">Loading…</small></div>
-    </div>
-  `;
-
-  main.appendChild(card);
-  main.appendChild(sidebar);
-  root.appendChild(main);
-
-  const content = card.querySelector("#content");
-  const sidebarContent = sidebar.querySelector("#sidebar");
-
-  // Helper function to create progress bars
-  function createBar(value, max = 5, color = "#0ea5e9") {
-    const width = Math.min(100, Math.abs(value) / max * 100);
-    const bg = value >= 0 ? color : "#ef4444";
-    return `
-      <div style="background: #374151; border: 1px solid #4b5563; height: 8px; border-radius: 4px; overflow: hidden; width: 100%; margin-top: 2px;">
-        <div style="width: ${width}%; height: 100%; background: ${bg};"></div>
-      </div>
-    `;
-  }
-
-  (async () => {
-    try {
-      // Use api.get to fetch portfolio risk data
-      const data = await api.get("/reports/RISK-PORTFOLIO");
-      const m = data.metrics || {};
-      const sectors = data.sectorExposures || [];
-      const factors = data.factorExposures || [];
-      const contrib = data.topContributorsBps || [];
-      const scenarios = data.scenarios || [];
-
-      content.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
-          <div>
-            <h2 style="margin: 0;">Portfolio Risk — ${data.portfolio?.name}</h2>
-            <small class="muted">Benchmark: ${data.portfolio?.benchmark}</small>
-          </div>
-          <small class="muted">As of: ${new Date(data.asOf).toLocaleString()}</small>
-        </div>
-
-        <!-- KPI Cards -->
-        <div class="grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
-          <div class="card" style="text-align: center; padding: 12px;">
-            <div class="muted" style="font-size: 12px;">Tracking Error</div>
-            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.trackingErrorPct)}</div>
-          </div>
-          <div class="card" style="text-align: center; padding: 12px;">
-            <div class="muted" style="font-size: 12px;">Beta</div>
-            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${m.beta?.toFixed(2)}</div>
-          </div>
-          <div class="card" style="text-align: center; padding: 12px;">
-            <div class="muted" style="font-size: 12px;">VaR 95% (1d)</div>
-            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.var95_oneDayPct)}</div>
-          </div>
-          <div class="card" style="text-align: center; padding: 12px;">
-            <div class="muted" style="font-size: 12px;">Active Share</div>
-            <div style="font-weight: 700; font-size: 20px; margin-top: 4px;">${fmtPct(m.activeSharePct)}</div>
-          </div>
-        </div>
-
-        <!-- Sector & Factor Tables -->
-        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-          <div class="card">
-            <div class="p">
-              <h3 style="margin: 0 0 12px 0;">Sector exposures</h3>
-              <table class="table">
-                <thead>
-                  <tr><th>Sector</th><th>Port</th><th>Bench</th><th>Active</th><th style="width: 60px;"></th></tr>
-                </thead>
-                <tbody>
-                  ${sectors.map(s => `
-                    <tr>
-                      <td>${s.sector}</td>
-                      <td>${fmtPct(s.portWtPct)}</td>
-                      <td>${fmtPct(s.benchWtPct)}</td>
-                      <td style="color: ${s.activePct >= 0 ? '#10b981' : '#ef4444'}">${fmtPct(s.activePct)}</td>
-                      <td>${createBar(s.activePct, 5)}</td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="p">
-              <h3 style="margin: 0 0 12px 0;">Factor exposures</h3>
-              <table class="table">
-                <thead>
-                  <tr><th>Factor</th><th>Exposure</th><th style="width: 60px;"></th></tr>
-                </thead>
-                <tbody>
-                  ${factors.map(f => `
-                    <tr>
-                      <td>${f.factor}</td>
-                      <td style="color: ${f.exposure >= 0 ? '#10b981' : '#ef4444'}">${f.exposure.toFixed(2)}</td>
-                      <td>${createBar(f.exposure, 0.5, "#8b5cf6")}</td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Contributors & Scenarios -->
-        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-          <div class="card">
-            <div class="p">
-              <h3 style="margin: 0 0 12px 0;">Top contributors (bps)</h3>
-              <ul style="list-style: none; padding: 0; margin: 0;">
-                ${contrib.map(c => `
-                  <li style="margin-bottom: 6px; color: ${c.contribBps >= 0 ? '#e5e7eb' : '#ef4444'};">
-                    ${c.name} — <strong>${fmtBps(c.contribBps)}</strong>
-                  </li>
-                `).join("")}
-              </ul>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="p">
-              <h3 style="margin: 0 0 12px 0;">Scenarios</h3>
-              <table class="table">
-                <thead>
-                  <tr><th>Scenario</th><th>Shock</th><th>PnL (bps)</th></tr>
-                </thead>
-                <tbody>
-                  ${scenarios.map(s => `
-                    <tr>
-                      <td>${s.name}</td>
-                      <td><small class="muted">${s.shock}</small></td>
-                      <td style="color: ${s.pnlBps >= 0 ? '#10b981' : '#ef4444'}">${fmtBps(s.pnlBps)}</td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div style="display: flex; gap: 8px;">
-          <button class="btn" onclick="alert('Download CSV - Mock functionality')">Download CSV</button>
-          <button class="btn" onclick="alert('Export PDF - Mock functionality')">Export PDF</button>
-        </div>
-      `;
-
-      sidebarContent.innerHTML = `
-        <h3 style="margin: 0 0 12px 0;">Portfolio Info</h3>
-        <div class="kv">
-          <div><strong>AUM:</strong> ${fmtAUD(data.portfolio?.aumAud || 0)}</div>
-          <div><strong>Name:</strong> ${data.portfolio?.name}</div>
-          <div><strong>Benchmark:</strong> ${data.portfolio?.benchmark}</div>
-        </div>
-        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #374151;">
-          <small class="muted">All figures are mock and for training purposes only.</small>
-        </div>
-      `;
-
-    } catch (e) {
-      content.innerHTML = `<div style="color: #ef4444;">Error loading Portfolio Risk data: ${e.message}</div>`;
-      sidebarContent.innerHTML = `<div style="color: #ef4444;">Error</div>`;
-    }
-  })();
-
-  return root;
+  app.innerHTML = "";
+  app.appendChild(view);
 }
 
 // Check authentication on load
