@@ -1991,7 +1991,57 @@ function ViewMandates() {
     draw(list);
   };
 
-  // Event delegation for table clicks
+  // Event delegation for t// Global API helper
+window.api = {
+  async get(path, options = {}) {
+    const token = localStorage.getItem("token");
+    const headers = { ...options.headers };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    
+    const res = await fetch(`/api${path}`, { ...options, headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Network error" }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async post(path, data, options = {}) {
+    const token = localStorage.getItem("token");
+    const headers = { 
+      "Content-Type": "application/json",
+      ...options.headers 
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch(`/api${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+      ...options
+    });
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Network error" }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
+  setToken(token) {
+    localStorage.setItem("token", token);
+  },
+
+  getToken() {
+    return localStorage.getItem("token");
+  },
+
+  clearToken() {
+    localStorage.removeItem("token");
+  }
+};
+
+able clicks
   tbody.addEventListener("click", (e) => {
     const mandateId = e.target?.dataset?.open;
     const client = e.target?.dataset?.client;
