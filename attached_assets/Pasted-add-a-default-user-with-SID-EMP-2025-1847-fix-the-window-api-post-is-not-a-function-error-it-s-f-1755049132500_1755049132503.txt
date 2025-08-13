@@ -1,0 +1,115 @@
+add a default user with SID = EMP-2025-1847
+
+fix the window.api.post is not a function error (it’s from script load order — your inline login JS runs before /app.js because /app.js was defered).
+
+Below are paste-ready changes.
+
+A) Add the user (SID = EMP-2025-1847)
+Path: data/users.json
+If the file already exists, add this object to the array. If it doesn’t, paste the full array below.
+
+json
+Copy code
+[
+  {
+    "id": "u-emp-2025-1847",
+    "sid": "EMP-2025-1847",
+    "username": "emp20251847",
+    "email": "emp20251847@example.com",
+    "name": "Training User",
+    "role": "Analyst",
+    "password": "Passw0rd!"
+  }
+]
+(Password is plain for now to match the mock auth flow we set up; you can change it.)
+
+B) Fix window.api.post error (script order + safe API helper)
+1) Ensure /app.js defines window.api (replace file)
+Path: public/app.js
+
+js
+Copy code
+// public/app.js
+(() => {
+  const API_BASE = window.API_BASE || `${location.origin}/api`;
+
+  function setToken(token) { if (token) localStorage.setItem("token", token); }
+  function clearToken() { localStorage.removeItem("token"); }
+  function getToken() { return localStorage.getItem("token"); }
+
+  async function apiFetch(path, options = {}) {
+    const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json");
+
+    // Only set JSON content-type when not sending FormData
+    if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const tok = getToken();
+    if (tok) headers.set("Authorization", `Bearer ${tok}`);
+
+    const res = await fetch(url, { ...options, headers });
+    const isJson = res.headers.get("content-type")?.includes("application/json");
+    const data = isJson ? await res.json().catch(() => ({})) : await res.text();
+
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) clearToken();
+      const message = (data && (data.message || data.error)) || `Request failed (${res.status})`;
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  const api = {
+    base: API_BASE,
+    setToken,
+    clearToken,
+    get: (p, opts) => apiFetch(p, { method: "GET", ...(opts || {}) }),
+    post: (p, body, opts) =>
+      apiFetch(p, { method: "POST", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    put: (p, body, opts) =>
+      apiFetch(p, { method: "PUT", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    patch: (p, body, opts) =>
+      apiFetch(p, { method: "PATCH", body: body instanceof FormData ? body : JSON.stringify(body || {}), ...(opts || {}) }),
+    del: (p, opts) => apiFetch(p, { method: "DELETE", ...(opts || {}) }),
+  };
+
+  // Expose
+  window.api = api;
+  window.API_BASE = API_BASE;
+  window.apiReady = Promise.resolve(api);
+})();
+2) Load /app.js without defer, so it’s guaranteed to exist before your inline scripts run.
+Change in BOTH pages: public/login.html and public/login-password.html
+
+Replace:
+
+html
+Copy code
+<script defer src="/app.js"></script>
+with:
+
+html
+Copy code
+<script src="/app.js"></script>
+(Keep your inline <script> at the end of <body> as you have it — this order guarantees window.api is ready.)
+
+Why your error happened: the inline script ran immediately when the parser reached it, but /app.js had defer, so it hadn’t executed yet; window.api didn’t exist → “post is not a function”.
+
+C) (Optional but nice) Pre-fill the SID on step 1
+If you want the SID field to default to EMP-2025-1847:
+
+Path: public/login.html
+Find the SID <input> and add value="EMP-2025-1847":
+
+html
+Copy code
+<input id="sid" name="sid" class="input" autocomplete="username" required value="EMP-2025-1847" />
+Quick smoke test
+Restart the server.
+
+Visit /login.html → Continue with EMP-2025-1847.
+
+On the password page, enter Passw0rd! → you should be redirected and token stored.
